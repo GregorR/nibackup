@@ -9,13 +9,16 @@
 struct NiBackup_ {
     size_t sourceLen;
     const char *source;
+    int sourceFd;
+
     size_t destLen;
     const char *dest;
+    int destFd;
 
     pthread_mutex_t qlock;
     sem_t qsem;
     NotifyQueue *notifs, *lastNotif;
-    void *notifData;
+    int notifFd;
 };
 typedef struct NiBackup_ NiBackup;
 

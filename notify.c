@@ -16,41 +16,31 @@
 #include "nibackup.h"
 #include "notify.h"
 
-struct FANotify_ {
-    int fd;
-};
-typedef struct FANotify_ FANotify;
-
 /* initialize the notification queue for this instance */
-void notifyInit(NiBackup *ni)
+int notifyInit(NiBackup *ni, int fd)
 {
     int tmpi;
 
-    FANotify *fan = malloc(sizeof(FANotify));
-    if (fan == NULL) {
-        /* critical failure */
-        perror("malloc");
-        exit(1);
-    }
+    if (fd < 0) {
+        /* init fanotify */
+        fd = fanotify_init(
+            FAN_CLASS_CONTENT,
+            O_RDONLY | O_LARGEFILE);
+        if (fd == -1) {
+            /* critical */
+            perror("fanotify_init");
+            exit(1);
+        }
 
-    /* init fanotify */
-    fan->fd = fanotify_init(
-        FAN_CLOEXEC | FAN_CLASS_CONTENT,
-        O_RDONLY | O_CLOEXEC | O_LARGEFILE);
-    if (fan->fd == -1) {
-        /* critical */
-        perror("fanotify_init");
-        exit(1);
-    }
-
-    /* and mark all events under the source */
-    tmpi = fanotify_mark(
-        fan->fd, FAN_MARK_ADD | FAN_MARK_MOUNT,
-        FAN_CLOSE_WRITE | FAN_MODIFY | FAN_ONDIR | FAN_EVENT_ON_CHILD,
-        FAN_NOFD, ni->source);
-    if (tmpi < 0) {
-        perror("fanotify_mark");
-        exit(1);
+        /* and mark all events under the source */
+        tmpi = fanotify_mark(
+            fd, FAN_MARK_ADD | FAN_MARK_MOUNT,
+            FAN_CLOSE_WRITE | FAN_MODIFY | FAN_ONDIR | FAN_EVENT_ON_CHILD,
+            FAN_NOFD, ni->source);
+        if (tmpi < 0) {
+            perror("fanotify_mark");
+            exit(1);
+        }
     }
 
     /* then initialize the locks */
@@ -65,7 +55,7 @@ void notifyInit(NiBackup *ni)
 
     /* and save our data */
     ni->notifs = ni->lastNotif = NULL;
-    ni->notifData = fan;
+    ni->notifFd = fd;
 }
 
 /* enqueue this event */
@@ -108,14 +98,14 @@ void enqueue(NiBackup *ni, char *file)
 void *notifyLoop(void *nivp)
 {
     NiBackup *ni = (NiBackup *) nivp;
-    FANotify *fan = (FANotify *) ni->notifData;
+    int fd = ni->notifFd;
 
     char buf[4096];
     char pathBuf[1024];
     const struct fanotify_event_metadata *metadata;
     ssize_t len;
 
-    while ((len = read(fan->fd, buf, sizeof(buf))) != -1) {
+    while ((len = read(fd, buf, sizeof(buf))) != -1) {
         metadata = (struct fanotify_event_metadata *) buf;
         while (FAN_EVENT_OK(metadata, len)) {
             /* FIXME: handle FAN_NOFD by forcing reset */
@@ -147,6 +137,6 @@ void *notifyLoop(void *nivp)
     }
 
     /* FIXME */
-    close(fan->fd);
+    close(fd);
     return NULL;
 }
