@@ -71,6 +71,7 @@ void backupRecursive(NiBackup *ni, int source, int dest)
 {
     DIR *dh;
     struct dirent *de, *der;
+    struct stat sbuf, tbuf;
     int sFd, dFd;
     int hSource, hDest;
 
@@ -82,6 +83,13 @@ void backupRecursive(NiBackup *ni, int source, int dest)
     hDest = dup(dest);
     if (hDest < 0) {
         perror("dup");
+        return;
+    }
+
+    /* stat the source (for st_dev)
+     * FIXME: cache */
+    if (fstat(source, &sbuf) != 0) {
+        perror("fstat");
         return;
     }
 
@@ -105,7 +113,11 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             if (dFd >= 0) {
                 sFd = openat(source, de->d_name, O_RDONLY);
                 if (sFd >= 0) {
-                    backupRecursive(ni, sFd, dFd);
+                    if (fstat(sFd, &tbuf) == 0 &&
+                        sbuf.st_dev == tbuf.st_dev) {
+
+                        backupRecursive(ni, sFd, dFd);
+                    }
                     close(sFd);
                 }
                 close(dFd);
