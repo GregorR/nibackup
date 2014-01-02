@@ -207,7 +207,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     int i, ifd = -1, ffd = -1, rfd = -1, wroteData = 0;
     size_t namelen;
     unsigned long long lastIncr, curIncr;
-    char incrBuf[4*sizeof(int)];
+    char incrBuf[4*sizeof(int)+1];
     ssize_t rd;
     BackupMetadata lastMeta, meta;
 
@@ -281,9 +281,11 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     /* write out the new metadata */
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.new", curIncr);
-    if (writeMetadata(&meta, destDir, pseudo) != 0) {
-        perror(name);
-        goto done;
+    if (meta.type != TYPE_NONEXIST) {
+        if (writeMetadata(&meta, destDir, pseudo) != 0) {
+            perror(name);
+            goto done;
+        }
     }
 
     /* and the new data */

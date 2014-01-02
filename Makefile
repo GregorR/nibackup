@@ -2,12 +2,16 @@ CC=gcc
 CFLAGS=-Wall -Werror -std=c99 -pedantic -g
 LIBS=-pthread -lcap
 
-OBJS=backup.o nibackup.o notify.o
+NIBACKUP_OBJS=backup.o nibackup.o notify.o
+NIPURGE_OBJS=nipurge.o
 
-all: nibackup
+all: nibackup nibackup-purge
 
-nibackup: $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) $(LIBS) -o nibackup
+nibackup: $(NIBACKUP_OBJS)
+	$(CC) $(CFLAGS) $(NIBACKUP_OBJS) $(LIBS) -o nibackup
+
+nibackup-purge: $(NIPURGE_OBJS)
+	$(CC) $(CFLAGS) $(NIPURGE_OBJS) -o nibackup-purge
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
