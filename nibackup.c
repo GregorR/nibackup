@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "backup.h"
 #include "nibackup.h"
 #include "notify.h"
 
@@ -87,6 +88,7 @@ int main(int argc, char **argv)
     /* and the notify thread */
     pthread_create(&nth, NULL, notifyLoop, &ni);
 
+#if 0
     while (sem_wait(&ni.qsem) == 0) {
         NotifyQueue *ev;
 
@@ -99,6 +101,12 @@ int main(int argc, char **argv)
         free(ev->file);
         free(ev);
     }
+#endif
+
+    backupInit(ni.sourceFd);
+
+    /* perform the initial backup */
+    backupRecursive(&ni, ni.sourceFd, ni.destFd);
 
     pthread_join(nth, NULL);
 
