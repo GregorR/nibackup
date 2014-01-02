@@ -19,10 +19,13 @@
 void reduceToSysAdmin(void);
 void reduceToUser(void);
 
+/* method to trigger a full update occasionally */
+void *periodicFull(void *nivp);
+
 int main(int argc, char **argv)
 {
     NiBackup ni;
-    pthread_t nth;
+    pthread_t nth, fth;
     struct stat sbuf;
     int tmpi;
 
@@ -44,12 +47,12 @@ int main(int argc, char **argv)
     /* source and destination must be real paths */
     ni.source = realpath(argv[1], NULL);
     if (ni.source == NULL) {
-        perror("realpath");
+        perror(argv[1]);
         return 1;
     }
     ni.dest = realpath(argv[2], NULL);
     if (ni.dest == NULL) {
-        perror("realpath");
+        perror(argv[2]);
         return 1;
     }
 
@@ -105,6 +108,9 @@ int main(int argc, char **argv)
     /* perform the initial backup */
     fprintf(stderr, "Initial sync...\n");
     backupRecursive(&ni, ni.sourceFd, ni.destFd);
+
+    /* and schedule full backups */
+    pthread_create(&fth, NULL, periodicFull, &ni);
 
     /* then continuous backup */
     fprintf(stderr, "Entering continuous mode.\n");
@@ -227,4 +233,32 @@ void reduceToUser()
     }
 
     cap_free(caps);
+}
+
+/* method to trigger a full update occasionally */
+void *periodicFull(void *nivp)
+{
+    NiBackup *ni = (NiBackup *) nivp;
+
+    while (1) {
+        NotifyQueue *ev;
+
+        sleep(21600);
+
+        ev = malloc(sizeof(NotifyQueue));
+        if (ev == NULL) continue;
+        ev->next = NULL;
+        ev->file = NULL;
+
+        pthread_mutex_lock(&ni->qlock);
+        if (ni->notifs == NULL) {
+            ni->notifs = ni->lastNotif = ev;
+        } else {
+            ni->lastNotif->next = ev;
+            ni->lastNotif = ev;
+        }
+
+        pthread_mutex_unlock(&ni->qlock);
+        sem_post(&ni->qsem);
+    }
 }
