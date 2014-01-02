@@ -127,9 +127,9 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             if (strncmp(de->d_name, "nii", 3)) continue;
 
             /* check if it's been deleted */
-            if (faccessat(source, de->d_name + 5, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
+            if (faccessat(source, de->d_name + 3, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
                 /* back it up */
-                backupPath(ni, de->d_name + 5, source, dest);
+                backupPath(ni, de->d_name + 3, source, dest);
             }
         }
 
@@ -325,7 +325,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
         /* need to return the directory fd so the caller can deal with it */
         pseudo[2] = 'd';
         *pseudoD = 0;
-        rfd = openat(destDir, pseudo, O_RDWR);
+        rfd = openat(destDir, pseudo, O_RDONLY);
 
     }
 
@@ -366,7 +366,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
                 /* and the patch */
                 sprintf(pseudoD, "/%llu.bsp", lastIncr);
-                patchFd = openat(destDir, pseudo, O_RDWR | O_CREAT | O_TRUNC);
+                patchFd = openat(destDir, pseudo, O_RDWR | O_CREAT | O_TRUNC, 0600);
 
                 if (patchFd >= 0) {
                     sprintf(patchBuf, "/proc/self/fd/%d", patchFd);
