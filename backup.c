@@ -16,38 +16,6 @@
 #include "backup.h"
 #include "nibackup.h"
 
-/* backup metadata */
-struct BackupMetadata_ {
-    char type;
-    int mode;
-    int uid;
-    int gid;
-    long long size;
-    long long mtime;
-    long long ctime;
-};
-typedef struct BackupMetadata_ BackupMetadata;
-
-/* backup types */
-#define TYPE_NONEXIST       'n'
-#define TYPE_FILE           'f'
-#define TYPE_DIRECTORY      'd'
-#define TYPE_LINK           'l'
-#define TYPE_FIFO           'p'
-#define TYPE_OTHER          'x'
-
-/* utility function to open a file and retrieve its metadata */
-static int openMetadata(BackupMetadata *meta, int *fd, int dirfd, const char *name);
-
-/* utility function to read serialized metadata */
-static int readMetadata(BackupMetadata *meta, int dirfd, const char *name);
-
-/* utility function to write serialized metadata */
-static int writeMetadata(BackupMetadata *meta, int dirfd, const char *name);
-
-/* Utility function to compare metadata. Returns 0 if equal, 1 otherwise. */
-static int cmpMetadata(BackupMetadata *l, BackupMetadata *r);
-
 /* utility function to copy a file sparsely */
 static int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname);
 
