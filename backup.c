@@ -123,8 +123,8 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             if (readdir_r(dh, de, &der) != 0) break;
             if (der == NULL) break;
 
-            /* only look at increment files (ni_i_) */
-            if (strncmp(de->d_name, "ni_i_", 5)) continue;
+            /* only look at increment files (nii) */
+            if (strncmp(de->d_name, "nii", 3)) continue;
 
             /* check if it's been deleted */
             if (faccessat(source, de->d_name + 5, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
@@ -199,19 +199,19 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     ssize_t rd;
     BackupMetadata lastMeta, meta;
 
-    /* space for our pseudofiles: ni_?_<name>/<ull>.{old,new} */
+    /* space for our pseudofiles: ni?<name>/<ull>.{old,new} */
     namelen = strlen(name);
-    pseudo = malloc(namelen + (4*sizeof(unsigned long long)) + 11);
+    pseudo = malloc(namelen + (4*sizeof(unsigned long long)) + 9);
     if (pseudo == NULL) /* FIXME */ goto done;
-    pseudo2 = malloc(namelen + (4*sizeof(unsigned long long)) + 11);
+    pseudo2 = malloc(namelen + (4*sizeof(unsigned long long)) + 9);
     if (pseudo2 == NULL) /* FIXME */ goto done;
-    pseudoD = pseudo + namelen + 5;
-    pseudo2D = pseudo2 + namelen + 5;
-    sprintf(pseudo, "ni_?_%s", name);
-    sprintf(pseudo2, "ni_?_%s", name);
+    pseudoD = pseudo + namelen + 3;
+    pseudo2D = pseudo2 + namelen + 3;
+    sprintf(pseudo, "ni?%s", name);
+    sprintf(pseudo2, "ni?%s", name);
 
     /* get our increment file */
-    pseudo[3] = 'i';
+    pseudo[2] = 'i';
     ifd = openat(destDir, pseudo, O_RDWR | O_CREAT, 0600);
     if (ifd < 0) {
         perror(pseudo);
@@ -224,7 +224,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* make all the pseudo-dirs */
     for (i = 0; pseudos[i]; i++) {
-        pseudo[3] = pseudos[i];
+        pseudo[2] = pseudos[i];
         if (mkdirat(destDir, pseudo, 0700) < 0) {
             if (errno != EEXIST) {
                 perror(pseudo);
@@ -253,7 +253,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     }
 
     /* read in the old metadata */
-    pseudo[3] = 'm';
+    pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.new", lastIncr);
     if (readMetadata(&lastMeta, destDir, pseudo) != 0) {
         perror(name);
@@ -267,7 +267,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     }
 
     /* write out the new metadata */
-    pseudo[3] = 'm';
+    pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.new", curIncr);
     if (writeMetadata(&meta, destDir, pseudo) != 0) {
         perror(name);
@@ -275,7 +275,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     }
 
     /* and the new data */
-    pseudo[3] = 'c';
+    pseudo[2] = 'c';
     sprintf(pseudoD, "/%llu.new", curIncr);
     if (meta.type == TYPE_LINK) {
         /* just get the link target */
@@ -323,7 +323,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     } else if (meta.type == TYPE_DIRECTORY) {
         /* need to return the directory fd so the caller can deal with it */
-        pseudo[3] = 'd';
+        pseudo[2] = 'd';
         *pseudoD = 0;
         rfd = openat(destDir, pseudo, O_RDWR);
 
@@ -336,8 +336,8 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     }
 
     /* rename the old metadata */
-    pseudo[3] = 'm';
-    pseudo2[3] = 'm';
+    pseudo[2] = 'm';
+    pseudo2[2] = 'm';
     sprintf(pseudoD, "/%llu.new", lastIncr);
     sprintf(pseudo2D, "/%llu.old", lastIncr);
     renameat(destDir, pseudo, destDir, pseudo2);
@@ -350,7 +350,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
         char patchBuf[15+4*sizeof(int)];
 
         /* the current increment */
-        pseudo[3] = 'c';
+        pseudo[2] = 'c';
         sprintf(pseudoD, "/%llu.new", curIncr);
         curIncrFd = openat(destDir, pseudo, O_RDONLY);
 
@@ -389,9 +389,9 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     if (!wroteData) {
         /* if we failed to patch, just rename */
-        pseudo[3] = 'c';
+        pseudo[2] = 'c';
         sprintf(pseudoD, "/%llu.new", lastIncr);
-        pseudo2[3] = 'c';
+        pseudo2[2] = 'c';
         sprintf(pseudo2D, "/%llu.old", lastIncr);
         renameat(destDir, pseudo, destDir, pseudo2);
     }
