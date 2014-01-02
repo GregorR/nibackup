@@ -56,6 +56,7 @@ int notifyInit(NiBackup *ni, int fd)
     /* and save our data */
     ni->notifs = ni->lastNotif = NULL;
     ni->notifFd = fd;
+    return fd;
 }
 
 /* enqueue this event */

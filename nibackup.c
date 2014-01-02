@@ -88,7 +88,12 @@ int main(int argc, char **argv)
     /* and the notify thread */
     pthread_create(&nth, NULL, notifyLoop, &ni);
 
-#if 0
+    backupInit(ni.sourceFd);
+
+    /* perform the initial backup */
+    backupRecursive(&ni, ni.sourceFd, ni.destFd);
+
+    /* then continuous backup */
     while (sem_wait(&ni.qsem) == 0) {
         NotifyQueue *ev;
 
@@ -97,16 +102,12 @@ int main(int argc, char **argv)
         ni.notifs = ev->next;
         pthread_mutex_unlock(&ni.qlock);
 
-        printf("%s\n", ev->file);
+        fprintf(stderr, "%s\n", ev->file);
+        backupContaining(&ni, ev->file);
+
         free(ev->file);
         free(ev);
     }
-#endif
-
-    backupInit(ni.sourceFd);
-
-    /* perform the initial backup */
-    backupRecursive(&ni, ni.sourceFd, ni.destFd);
 
     pthread_join(nth, NULL);
 

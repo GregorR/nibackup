@@ -141,7 +141,36 @@ void backupRecursive(NiBackup *ni, int source, int dest)
 /* back up this path and all containing directories */
 void backupContaining(NiBackup *ni, char *path)
 {
-    /* FIXME */
+    int source, dest;
+    char *part, *saveptr;
+
+    /* first off, remove the source */
+    if (strncmp(path, ni->source, ni->sourceLen)) return;
+    path += ni->sourceLen;
+    if (path[0] != '/') return;
+    path++;
+
+    /* now start from here and back up */
+    source = ni->sourceFd;
+    dest = ni->destFd;
+
+    while ((part = strtok_r(path, "/", &saveptr))) {
+        path = NULL;
+
+        /* follow this path in the source */
+        source = openat(source, part, O_RDONLY);
+        if (source < 0) {
+            /* FIXME */
+            return;
+        }
+
+        /* and back it up */
+        dest = backupPath(ni, part, source, dest);
+        if (dest < 0) {
+            /* FIXME */
+            return;
+        }
+    }
 }
 
 static const char pseudos[] = "cmd"; /* content, metadata, directory */
