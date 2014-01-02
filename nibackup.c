@@ -24,6 +24,7 @@ int main(int argc, char **argv)
     NiBackup ni;
     pthread_t nth;
     struct stat sbuf;
+    int tmpi;
 
     if (argc < 3) {
         fprintf(stderr, "Use: nibackup <source> <dest>\n");
@@ -73,6 +74,17 @@ int main(int argc, char **argv)
         }
     }
 
+    /* now we can safely make the notify fd cloexec */
+    tmpi = fcntl(ni.notifFd, F_GETFD);
+    if (tmpi < 0) {
+        perror("notify");
+        return 1;
+    }
+    if (fcntl(ni.notifFd, F_SETFD, tmpi | FD_CLOEXEC) < 0) {
+        perror("notify");
+        return 1;
+    }
+
     /* for *at functions */
     ni.sourceFd = open(ni.source, O_RDONLY);
     if (ni.sourceFd < 0) {
@@ -91,22 +103,28 @@ int main(int argc, char **argv)
     backupInit(ni.sourceFd);
 
     /* perform the initial backup */
+    fprintf(stderr, "Initial sync...\n");
     backupRecursive(&ni, ni.sourceFd, ni.destFd);
 
     /* then continuous backup */
+    fprintf(stderr, "Entering continuous mode.\n");
     while (sem_wait(&ni.qsem) == 0) {
         NotifyQueue *ev;
 
-        pthread_mutex_lock(&ni.qlock);
-        ev = ni.notifs;
-        ni.notifs = ev->next;
-        pthread_mutex_unlock(&ni.qlock);
+        /* wait for 10 seconds of messages */
+        sleep(10);
+        fprintf(stderr, "Incremental backup.\n");
+        do {
+            pthread_mutex_lock(&ni.qlock);
+            ev = ni.notifs;
+            ni.notifs = ev->next;
+            pthread_mutex_unlock(&ni.qlock);
 
-        fprintf(stderr, "%s\n", ev->file);
-        backupContaining(&ni, ev->file);
+            backupContaining(&ni, ev->file);
 
-        free(ev->file);
-        free(ev);
+            free(ev->file);
+            free(ev);
+        } while (sem_trywait(&ni.qsem) == 0);
     }
 
     pthread_join(nth, NULL);

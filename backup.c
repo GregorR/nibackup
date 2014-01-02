@@ -10,6 +10,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "backup.h"
@@ -49,6 +50,9 @@ static int cmpMetadata(BackupMetadata *l, BackupMetadata *r);
 
 /* utility function to copy a file sparsely */
 static int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname);
+
+/* utility function to call bsdiff, returning 0 if it succeeds */
+static int bsdiff(const char *from, const char *to, const char *patch);
 
 static size_t direntLen;
 
@@ -125,7 +129,6 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             /* check if it's been deleted */
             if (faccessat(source, de->d_name + 5, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
                 /* back it up */
-                fprintf(stderr, "%s\n", de->d_name + 5);
                 backupPath(ni, de->d_name + 5, source, dest);
             }
         }
@@ -188,7 +191,7 @@ static const char pseudos[] = "cmd"; /* content, metadata, directory */
  * applicable */
 int backupPath(NiBackup *ni, char *name, int source, int destDir)
 {
-    char *pseudo = NULL, *pseudoD;
+    char *pseudo = NULL, *pseudoD, *pseudo2, *pseudo2D;
     int i, ifd = -1, ffd = -1, rfd = -1, wroteData = 0;
     size_t namelen;
     unsigned long long lastIncr, curIncr;
@@ -200,19 +203,12 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     namelen = strlen(name);
     pseudo = malloc(namelen + (4*sizeof(unsigned long long)) + 11);
     if (pseudo == NULL) /* FIXME */ goto done;
+    pseudo2 = malloc(namelen + (4*sizeof(unsigned long long)) + 11);
+    if (pseudo2 == NULL) /* FIXME */ goto done;
     pseudoD = pseudo + namelen + 5;
-
-    /* make all the pseudo-dirs */
+    pseudo2D = pseudo2 + namelen + 5;
     sprintf(pseudo, "ni_?_%s", name);
-    for (i = 0; pseudos[i]; i++) {
-        pseudo[3] = pseudos[i];
-        if (mkdirat(destDir, pseudo, 0700) < 0) {
-            if (errno != EEXIST) {
-                perror(pseudo);
-                goto done;
-            }
-        }
-    }
+    sprintf(pseudo2, "ni_?_%s", name);
 
     /* get our increment file */
     pseudo[3] = 'i';
@@ -224,6 +220,17 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     if (flock(ifd, LOCK_EX) != 0) {
         perror(pseudo);
         goto done;
+    }
+
+    /* make all the pseudo-dirs */
+    for (i = 0; pseudos[i]; i++) {
+        pseudo[3] = pseudos[i];
+        if (mkdirat(destDir, pseudo, 0700) < 0) {
+            if (errno != EEXIST) {
+                perror(pseudo);
+                goto done;
+            }
+        }
     }
 
     /* find our last increment */
@@ -322,19 +329,78 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     }
 
-    /* FIXME: make incremental */
-    (void) wroteData;
-
-    /* finally, write out the increment file */
+    /* we can now safely mark the increment file */
     if (lseek(ifd, 0, SEEK_SET) == 0) {
         sprintf(incrBuf, "%llu", curIncr);
         write(ifd, incrBuf, strlen(incrBuf));
+    }
+
+    /* rename the old metadata */
+    pseudo[3] = 'm';
+    pseudo2[3] = 'm';
+    sprintf(pseudoD, "/%llu.new", lastIncr);
+    sprintf(pseudo2D, "/%llu.old", lastIncr);
+    renameat(destDir, pseudo, destDir, pseudo2);
+
+    /* create the content patchfile */
+    if (wroteData) {
+        int lastIncrFd, curIncrFd, patchFd;
+        char lastIncrBuf[15+4*sizeof(int)];
+        char curIncrBuf[15+4*sizeof(int)];
+        char patchBuf[15+4*sizeof(int)];
+
+        /* the current increment */
+        pseudo[3] = 'c';
+        sprintf(pseudoD, "/%llu.new", curIncr);
+        curIncrFd = openat(destDir, pseudo, O_RDONLY);
+
+        if (curIncrFd >= 0) {
+            sprintf(curIncrBuf, "/proc/self/fd/%d", curIncrFd);
+
+            /* the last increment */
+            sprintf(pseudoD, "/%llu.new", lastIncr);
+            lastIncrFd = openat(destDir, pseudo, O_RDONLY);
+
+            if (lastIncrFd >= 0) {
+                sprintf(lastIncrBuf, "/proc/self/fd/%d", lastIncrFd);
+
+                /* and the patch */
+                sprintf(pseudoD, "/%llu.bsp", lastIncr);
+                patchFd = openat(destDir, pseudo, O_RDWR | O_CREAT | O_TRUNC);
+
+                if (patchFd >= 0) {
+                    sprintf(patchBuf, "/proc/self/fd/%d", patchFd);
+
+                    if (bsdiff(curIncrBuf, lastIncrBuf, patchBuf) == 0) {
+                        /* remove the original */
+                        sprintf(pseudoD, "/%llu.new", lastIncr);
+                        unlinkat(destDir, pseudo, 0);
+                    } else {
+                        wroteData = 0; /* FIXME, bad name */
+                    }
+
+                    close(patchFd);
+                }
+                close(lastIncrFd);
+            }
+            close(curIncrFd);
+        }
+    }
+
+    if (!wroteData) {
+        /* if we failed to patch, just rename */
+        pseudo[3] = 'c';
+        sprintf(pseudoD, "/%llu.new", lastIncr);
+        pseudo2[3] = 'c';
+        sprintf(pseudo2D, "/%llu.old", lastIncr);
+        renameat(destDir, pseudo, destDir, pseudo2);
     }
 
 done:
     if (ffd >= 0) close(ffd);
     if (ifd >= 0) close(ifd);
     free(pseudo);
+    free(pseudo2);
 
     return rfd;
 }
@@ -546,4 +612,26 @@ done:
     if (ifd >= 0) close(ifd);
     if (ofd >= 0) close(ofd);
     return ret;
+}
+
+/* utility function to call bsdiff, returning 0 if it succeeds */
+static int bsdiff(const char *from, const char *to, const char *patch)
+{
+    int status;
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+
+    if (pid == 0) {
+        /* child, call bsdiff */
+        execlp("bsdiff", "bsdiff", from, to, patch, NULL);
+        exit(1);
+        abort();
+    }
+
+    /* wait for bsdiff */
+    if (waitpid(pid, &status, 0) != pid)
+        return -1;
+    if (WEXITSTATUS(status) != 0)
+        return -1;
+    return 0;
 }

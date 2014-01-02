@@ -25,7 +25,7 @@ int notifyInit(NiBackup *ni, int fd)
         /* init fanotify */
         fd = fanotify_init(
             FAN_CLASS_CONTENT,
-            O_RDONLY | O_LARGEFILE);
+            O_PATH | O_CLOEXEC);
         if (fd == -1) {
             /* critical */
             perror("fanotify_init");
