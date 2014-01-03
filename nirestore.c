@@ -72,7 +72,8 @@ int main(int argc, char **argv)
 {
     const char *backupDir = NULL, *targetDir = NULL;
     char *selection = NULL;
-    long long maxAge = 0, newest;
+    long long maxAge, newest;
+    int setAge = 0, setTime = 0;
     int sourceFd, targetFd;
     long name_max;
     int argi;
@@ -81,11 +82,21 @@ int main(int argc, char **argv)
         char *arg = argv[argi];
 
         if (arg[0] == '-') {
-            ARG(a, age) {
+            ARGN(a, age) {
                 arg = argv[++argi];
                 maxAge = atoll(arg);
+                setAge = 1;
                 if (maxAge <= 0 && strcmp(arg, "0")) {
                     fprintf(stderr, "Invalid age\n");
+                    return 1;
+                }
+
+            } else ARGN(t, time) {
+                arg = argv[++argi];
+                newest = atoll(arg);
+                setTime = 1;
+                if (newest == 0 && strcmp(arg, "0")) {
+                    fprintf(stderr, "Invalid restoration time\n");
                     return 1;
                 }
 
@@ -114,12 +125,15 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!backupDir) {
+    if (!backupDir || (setAge && setTime)) {
         usage();
         return 1;
     }
 
-    newest = time(NULL) - maxAge;
+    if (!setTime) {
+        if (!setAge) maxAge = 0;
+        newest = time(NULL) - maxAge;
+    }
 
     /* open the backup directory... */
     SF(sourceFd, open, -1, backupDir, (backupDir, O_RDONLY));
