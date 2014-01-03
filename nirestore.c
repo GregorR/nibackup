@@ -30,6 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "arg.h"
 #include "metadata.h"
 
 #define SF(into, func, bad, err, args) do { \
@@ -49,6 +50,9 @@
 
 static size_t direntLen;
 
+/* usage statement */
+static void usage(void);
+
 /* select a given file or directory in the backup */
 static void restoreSelected(long long newest, int sourceDir, int targetDir, char *selection);
 
@@ -66,36 +70,66 @@ static int bspatch(const char *from, const char *to, const char *patch);
 
 int main(int argc, char **argv)
 {
-    const char *backupDir, *targetDir;
-    char *selection;
-    long long maxAge, newest;
+    const char *backupDir = NULL, *targetDir = NULL;
+    char *selection = NULL;
+    long long maxAge = 0, newest;
     int sourceFd, targetFd;
     long name_max;
+    int argi;
 
-    if (argc < 4) {
-        fprintf(stderr, "Use: nibackup-restore <backup directory> <target directory> <age> [selection]\n");
+    for (argi = 1; argi < argc; argi++) {
+        char *arg = argv[argi];
+
+        if (arg[0] == '-') {
+            ARG(a, age) {
+                arg = argv[++argi];
+                maxAge = atoll(arg);
+                if (maxAge <= 0 && strcmp(arg, "0")) {
+                    fprintf(stderr, "Invalid age\n");
+                    return 1;
+                }
+
+            } else ARGN(i, selection) {
+                selection = argv[++argi];
+
+            } else {
+                usage();
+                return 1;
+
+            }
+
+        } else {
+            if (!backupDir) {
+                backupDir = arg;
+
+            } else if (!targetDir) {
+                targetDir = arg;
+
+            } else {
+                usage();
+                return 1;
+
+            }
+
+        }
+    }
+
+    if (!backupDir) {
+        usage();
         return 1;
     }
 
-    backupDir = argv[1];
-    targetDir = argv[2];
-
-    maxAge = atoll(argv[3]);
-    if (maxAge <= 0 && strcmp(argv[3], "0")) {
-        fprintf(stderr, "Invalid age!\n");
-        return 1;
-    }
     newest = time(NULL) - maxAge;
-
-    selection = NULL;
-    if (argc > 4)
-        selection = argv[4];
 
     /* open the backup directory... */
     SF(sourceFd, open, -1, backupDir, (backupDir, O_RDONLY));
 
     /* and the target directory... */
-    SF(targetFd, open, -1, targetDir, (targetDir, O_RDONLY));
+    if (targetDir) {
+        SF(targetFd, open, -1, targetDir, (targetDir, O_RDONLY));
+    } else {
+        targetFd = -1;
+    }
 
     /* find our dirent size... */
     name_max = fpathconf(sourceFd, _PC_NAME_MAX);
@@ -114,6 +148,18 @@ int main(int argc, char **argv)
     return 0;
 }
 
+/* usage statement */
+static void usage()
+{
+    fprintf(stderr, "Use: nibackup-restore [options] <backup> [target]\n"
+                    "    If target is unspecified, just lists files that would be restored.\n"
+                    "Options\n"
+                    "  -a|--age <time>:\n"
+                    "      Restore files as they existed <time> seconds ago.\n"
+                    "  -i|--selection <path>:\n"
+                    "      Restore only <path>.\n");
+}
+
 /* select a given file or directory in the backup */
 static void restoreSelected(long long newest, int sourceDir, int targetDir, char *selection)
 {
@@ -128,7 +174,7 @@ static void restoreSelected(long long newest, int sourceDir, int targetDir, char
         /* descend into this directory */
         SF(dir, malloc, NULL, "malloc", (strlen(part) + 4));
         sprintf(dir, "nid%s", part);
-        SF(newSourceDir, openat, -1, dir, (sourceDir, dir, O_RDONLY));
+        SF(newSourceDir, openat, -1, part, (sourceDir, dir, O_RDONLY));
         free(dir);
         close(sourceDir);
         sourceDir = newSourceDir;
@@ -151,6 +197,9 @@ static void restoreDir(long long newest, int sourceDir, int targetDir)
     SF(hdirfd, dup, -1, "dup", (sourceDir));
     SF(dh, fdopendir, NULL, "fdopendir", (hdirfd));
 
+    if (targetDir == -1)
+        printf("<\n");
+
     /* restore each file */
     while (1) {
         if (readdir_r(dh, de, &der) != 0) break;
@@ -162,8 +211,10 @@ static void restoreDir(long long newest, int sourceDir, int targetDir)
         /* restore this */
         restore(newest, sourceDir, targetDir, de->d_name + 3);
     }
-
     closedir(dh);
+
+    if (targetDir == -1)
+        printf(">\n");
 
     free(de);
 }
@@ -183,7 +234,7 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
     sprintf(pseudo, "nii%s", name);
 
     /* open and lock the increment file */
-    SF(ifd, openat, -1, pseudo, (sourceDir, pseudo, O_RDONLY));
+    SF(ifd, openat, -1, name, (sourceDir, pseudo, O_RDONLY));
     SF(tmpi, flock, -1, pseudo, (ifd, LOCK_EX));
 
     /* read in the current increment */
@@ -208,40 +259,45 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
     /* load in the metadata */
     SF(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo));
 
+    if (targetDir == -1)
+        printf("%s\n", name);
+
     /* restore the data if applicable */
     status = 0;
-    switch (meta.type) {
-        case MD_TYPE_FILE:
-        case MD_TYPE_LINK:
-            status = restoreData(sourceDir, targetDir, name, oldIncr, curIncr);
+    if (targetDir >= 0) {
+        switch (meta.type) {
+            case MD_TYPE_FILE:
+            case MD_TYPE_LINK:
+                status = restoreData(sourceDir, targetDir, name, oldIncr, curIncr);
 
-            if (status == 0 && meta.type == MD_TYPE_LINK) {
-                /* convert the data into a link */
-                char *linkTarget;
-                int lfd;
-                ssize_t rd;
+                if (status == 0 && meta.type == MD_TYPE_LINK) {
+                    /* convert the data into a link */
+                    char *linkTarget;
+                    int lfd;
+                    ssize_t rd;
 
-                SF(linkTarget, malloc, NULL, "malloc", (meta.size + 1));
-                REP(lfd, openat, -1, name, (targetDir, name, O_RDONLY));
-                if (lfd != -1) {
-                    REP(rd, read, -1, "read", (lfd, linkTarget, meta.size));
-                    linkTarget[rd] = 0;
-                    close(lfd);
+                    SF(linkTarget, malloc, NULL, "malloc", (meta.size + 1));
+                    REP(lfd, openat, -1, name, (targetDir, name, O_RDONLY));
+                    if (lfd != -1) {
+                        REP(rd, read, -1, "read", (lfd, linkTarget, meta.size));
+                        linkTarget[rd] = 0;
+                        close(lfd);
 
-                    REP(status, unlinkat, -1, name, (targetDir, name, 0));
-                    if (status == 0) REP(status, symlinkat, -1, name, (linkTarget, targetDir, name));
+                        REP(status, unlinkat, -1, name, (targetDir, name, 0));
+                        if (status == 0) REP(status, symlinkat, -1, name, (linkTarget, targetDir, name));
+                    }
+                    free(linkTarget);
                 }
-                free(linkTarget);
-            }
-            break;
+                break;
 
-        case MD_TYPE_DIRECTORY:
-            REP(status, mkdirat, -1, name, (targetDir, name, 0700));
-            break;
+            case MD_TYPE_DIRECTORY:
+                REP(status, mkdirat, -1, name, (targetDir, name, 0700));
+                break;
 
-        case MD_TYPE_FIFO:
-            REP(status, mkfifoat, -1, name, (targetDir, name, 0600));
-            break;
+            case MD_TYPE_FIFO:
+                REP(status, mkfifoat, -1, name, (targetDir, name, 0600));
+                break;
+        }
     }
 
     /* if this was a directory, restore its content */
@@ -250,9 +306,12 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
         pseudo[2] = 'd';
         *pseudoD = 0;
         REP(newSourceDir, openat, -1, pseudo, (sourceDir, pseudo, O_RDONLY));
-        REP(newTargetDir, openat, -1, name, (targetDir, name, O_RDONLY));
+        if (targetDir >= 0)
+            REP(newTargetDir, openat, -1, name, (targetDir, name, O_RDONLY));
+        else
+            newTargetDir = -1;
 
-        if (newSourceDir != -1 && newTargetDir != -1)
+        if (newSourceDir != -1 && (targetDir == -1 || newTargetDir != -1))
             restoreDir(newest, newSourceDir, newTargetDir);
 
         if (newSourceDir != -1) close(newSourceDir);
@@ -260,7 +319,7 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
     }
 
     /* now restore the file metadata */
-    if (status == 0 && meta.type != MD_TYPE_NONEXIST) {
+    if (targetDir >= 0 && status == 0 && meta.type != MD_TYPE_NONEXIST) {
         struct timespec times[2];
 
         if (meta.type != MD_TYPE_LINK)
