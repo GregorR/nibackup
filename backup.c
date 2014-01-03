@@ -402,24 +402,6 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
         renameat(destDir, pseudo, destDir, pseudo2);
     }
 
-    /* And finally, if we just wrote a nothing from nothing (i.e., increment 1
-     * is a delete of nothing), get rid of it. This can be caused by
-     * notifications of files that are temporary or spurious. */
-    if (meta.type == MD_TYPE_NONEXIST && curIncr == 1) {
-        pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.new", curIncr);
-        unlinkat(destDir, pseudo, 0);
-        *pseudoD = 0;
-
-        for (i = 0; pseudos[i]; i++) {
-            pseudo[2] = pseudos[i];
-            unlinkat(destDir, pseudo, AT_REMOVEDIR);
-        }
-
-        pseudo[2] = 'i';
-        unlinkat(destDir, pseudo, 0);
-    }
-
 done:
     if (ifd >= 0) close(ifd);
     if (ffd >= 0) close(ffd);
