@@ -10,7 +10,7 @@ binary diffs.
 NiBackup is based on the (Linux-specific) fanotify interface, which is in turn
 an improvement in some ways on the inotify interface. This means it detects
 changes *as they happen* on the filesystem, and keeps continuous, incremental
-backups.
+backups. Unlike inotify, fanotify monitors the entire filesystem.
 
 NiBackup is currently in a very experimental stage. I'm using it for my own
 backup, and making it publicly available, but it needs a lot of work to make it
@@ -24,19 +24,21 @@ Using NiBackup
 NiBackup consists of three tools: nibackup (the daemon), nibackup-purge and
 nibackup-restore.
 
-nibackup is the daemon. Running it is very simple: `sudo nibackup <directory to
-back up> <backup directory>`. It will start with a full synchronization, then
-use fanotify to watch for future changes. Because fanotify is wonky and
-incomplete, it also performs another full synchronization every six hours. This
-is currently not configurable, but will be Soon™.
+nibackup is the daemon. Running it is very simple:
+`sudo nibackup <directory to back up> <backup directory>`.
+It will start with a full synchronization, then use fanotify to watch for
+future changes. Additional options are available to control wait times, ignore
+dotfiles, etc. Because fanotify is wonky and incomplete, it also performs
+another full synchronization every six hours, also configurable.
 
-nibackup-purge purges old data from a backup. `nibackup-purge <backup
-directory> <age>` deletes all unused backup increments older than `age`
-seconds. If `age` is 0, all old data will be removed, leaving only the current
-status backed up.
+nibackup-purge purges old data from a backup.
+`nibackup-purge <backup> <age>`
+deletes all unused backup increments older than `age` seconds. If `age` is 0,
+all old data will be removed, leaving only the current status backed up.  The
+`-n` option is also supported to show what would be deleted without deleting
+it.
 
-nibackup-restore restores files from a backup. `nibackup-restore <backup
-directory> <target directory> <age> [file selection]`
+nibackup-restore restores files from a backup.
 
 
 Technical
