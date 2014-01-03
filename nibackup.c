@@ -61,6 +61,7 @@ int main(int argc, char **argv)
     ni.dest = NULL;
     ni.waitAfterNotif = 10;
     ni.fullSyncCycle = 21600;
+    ni.noRootDotfiles = 0;
     ni.notifFd = -1;
 
     for (argi = 1; argi < argc; argi++) {
@@ -75,12 +76,15 @@ int main(int argc, char **argv)
                 arg = argv[++argi];
                 ni.fullSyncCycle = atoi(arg);
 
-            } else ARGN(@, notification-fd) {
-                arg = argv[++argi];
-                ni.notifFd = atoi(arg);
+            } else ARG(., no-root-dotfiles) {
+                ni.noRootDotfiles = 1;
 
             } else ARG(v, verbose) {
                 verbose = 1;
+
+            } else ARGN(@, notification-fd) {
+                arg = argv[++argi];
+                ni.notifFd = atoi(arg);
 
             } else {
                 usage();
@@ -233,7 +237,11 @@ static void usage()
                     "  -w|--notification-wait <time>:\n"
                     "      Wait <time> seconds after notifications arrive before syncing.\n"
                     "  -F|--full-sync-cycle <time>:\n"
-                    "      Perform a full sync every <time> seconds.\n");
+                    "      Perform a full sync every <time> seconds.\n"
+                    "  -.|--no-root-dotfiles:\n"
+                    "      Do not back up dotfiles in the root of <source> (useful for homedirs).\n"
+                    "  -v|--verbose:\n"
+                    "      Be more verbose.\n");
 }
 
 static void reduceToSysAdmin()

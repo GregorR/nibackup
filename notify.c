@@ -88,6 +88,12 @@ void enqueue(NiBackup *ni, char *file)
         return;
     }
 
+    /* and ignore dotfiles */
+    if (ni->noRootDotfiles && file[ni->sourceLen + 1] == '.') {
+        free(file);
+        return;
+    }
+
     pthread_mutex_lock(&ni->qlock);
 
     /* create this event */

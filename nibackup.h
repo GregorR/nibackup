@@ -33,6 +33,7 @@ struct NiBackup_ {
 
     int waitAfterNotif;
     int fullSyncCycle;
+    int noRootDotfiles;
 
     pthread_mutex_t qlock;
     sem_t qsem;

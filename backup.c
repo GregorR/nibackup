@@ -89,6 +89,9 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             /* skip . and .. */
             if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
 
+            /* and dotfiles in the root */
+            if (ni->noRootDotfiles && source == ni->sourceFd && de->d_name[0] == '.') continue;
+
             /* otherwise, back it up */
             dFd = backupPath(ni, de->d_name, source, dest);
 
@@ -148,6 +151,9 @@ void backupContaining(NiBackup *ni, char *path)
     path += ni->sourceLen;
     if (path[0] != '/') goto done;
     path++;
+
+    /* if it's a dotfile, ignore it */
+    if (ni->noRootDotfiles && path[0] == '.') goto done;
 
     /* now start from here and back up */
     source = dup(ni->sourceFd);
