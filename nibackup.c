@@ -17,6 +17,7 @@
  */
 
 #define _XOPEN_SOURCE 700 /* for realpath */
+#define _GNU_SOURCE /* for pthread_tryjoin_np */
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -41,13 +42,18 @@ static void usage(void);
 static void reduceToSysAdmin(void);
 static void reduceToUser(void);
 
+/* background function for full backup */
+static void *fullBackup(void *nivp);
+
 /* method to trigger a full update occasionally */
 static void *periodicFull(void *nivp);
 
 int main(int argc, char **argv)
 {
     NiBackup ni;
-    pthread_t nth, fth;
+    pthread_t notifTh,
+              cycleTh,
+              fullTh;
     struct stat sbuf;
     int tmpi, argi;
 
@@ -168,16 +174,16 @@ int main(int argc, char **argv)
     }
 
     /* and the notify thread */
-    pthread_create(&nth, NULL, notifyLoop, &ni);
+    pthread_create(&notifTh, NULL, notifyLoop, &ni);
 
     backupInit(ni.sourceFd);
 
     /* perform the initial backup */
-    fprintf(stderr, "Initial sync...\n");
-    backupRecursive(&ni, ni.sourceFd, ni.destFd);
+    fprintf(stderr, "Starting initial sync.\n");
+    pthread_create(&fullTh, NULL, fullBackup, &ni);
 
     /* and schedule full backups */
-    pthread_create(&fth, NULL, periodicFull, &ni);
+    pthread_create(&cycleTh, NULL, periodicFull, &ni);
 
     /* then continuous backup */
     fprintf(stderr, "Entering continuous mode.\n");
@@ -198,14 +204,19 @@ int main(int argc, char **argv)
                 free(ev->file);
             } else {
                 fprintf(stderr, "Periodic full sync.\n");
-                backupRecursive(&ni, ni.sourceFd, ni.destFd);
+                if (pthread_tryjoin_np(fullTh, NULL) == 0) {
+                    fprintf(stderr, "Starting full sync\n");
+                    pthread_create(&fullTh, NULL, fullBackup, &ni);
+                }
             }
 
             free(ev);
         } while (sem_trywait(&ni.qsem) == 0);
     }
 
-    pthread_join(nth, NULL);
+    pthread_join(notifTh, NULL);
+    pthread_join(cycleTh, NULL);
+    pthread_join(fullTh, NULL);
 
     return 0;
 }
@@ -316,6 +327,14 @@ static void reduceToUser()
     }
 
     cap_free(caps);
+}
+
+
+/* background function for full backup */
+static void *fullBackup(void *nivp)
+{
+    NiBackup *ni = (NiBackup *) nivp;
+    backupRecursive(ni, ni->sourceFd, ni->destFd);
 }
 
 /* method to trigger a full update occasionally */

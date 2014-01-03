@@ -213,7 +213,7 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
         goto done;
     }
     if (flock(ifd, LOCK_EX) != 0) {
-        perror(pseudo);
+        perror("flock");
         goto done;
     }
 
@@ -257,7 +257,12 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* check if it's changed */
     if (cmpMetadata(&lastMeta, &meta) == 0) {
-        /* no change, no increment */
+        /* no change, no increment, but still need to return the directory */
+        if (meta.type == MD_TYPE_DIRECTORY) {
+            pseudo[2] = 'd';
+            *pseudoD = 0;
+            rfd = openat(destDir, pseudo, O_RDONLY);
+        }
         goto done;
     }
 
