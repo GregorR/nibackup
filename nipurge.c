@@ -165,14 +165,15 @@ void purge(long long oldest, int dirfd, char *name)
         }
     }
 
-    /* if the latest valid increment is dead, check if it was deleted */
-    if (oldIncr == curIncr - 1) {
+    /* we can also remove any following deletions */
+    for (ii = oldIncr + 1; ii <= curIncr; ii++) {
         BackupMetadata meta;
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.new", curIncr);
+        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
         if (readMetadata(&meta, dirfd, pseudo) == 0) {
-            if (meta.type == MD_TYPE_NONEXIST) oldIncr = curIncr;
-        }
+            if (meta.type == MD_TYPE_NONEXIST) oldIncr = ii;
+            else break;
+        } else break;
     }
 
     /* delete all the old increments */
