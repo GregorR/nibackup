@@ -29,46 +29,85 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "arg.h"
 #include "backup.h"
 #include "nibackup.h"
 #include "notify.h"
 
+/* usage statement */
+static void usage(void);
+
 /* privilege reduction utility functions */
-void reduceToSysAdmin(void);
-void reduceToUser(void);
+static void reduceToSysAdmin(void);
+static void reduceToUser(void);
 
 /* method to trigger a full update occasionally */
-void *periodicFull(void *nivp);
+static void *periodicFull(void *nivp);
 
 int main(int argc, char **argv)
 {
     NiBackup ni;
     pthread_t nth, fth;
     struct stat sbuf;
-    int tmpi;
+    int tmpi, argi;
 
-    if (argc < 3) {
-        fprintf(stderr, "Use: nibackup <source> <dest>\n");
-        return 1;
+    ni.source = NULL;
+    ni.dest = NULL;
+    ni.waitAfterNotif = 10;
+    ni.fullSyncCycle = 21600;
+    ni.notifFd = -1;
+
+    for (argi = 1; argi < argc; argi++) {
+        char *arg = argv[argi];
+
+        if (arg[0] == '-') {
+            ARGN(w, notification-wait) {
+                arg = argv[++argi];
+                ni.waitAfterNotif = atoi(arg);
+
+            } else ARGN(F, full-sync-cycle) {
+                arg = argv[++argi];
+                ni.fullSyncCycle = atoi(arg);
+
+            } else ARGN(@, notification-fd) {
+                arg = argv[++argi];
+                ni.notifFd = atoi(arg);
+
+            } else {
+                usage();
+                return 1;
+            }
+
+        } else {
+            if (!ni.source) {
+                ni.source = arg;
+
+            } else if (!ni.dest) {
+                ni.dest = arg;
+
+            } else {
+                usage();
+                return 1;
+
+            }
+        }
     }
 
-    if (argc > 3) {
-        /* already have the notify fd */
-        ni.notifFd = atoi(argv[3]);
-    } else {
-        ni.notifFd = -1;
+    if (!ni.source || !ni.dest) {
+        usage();
+        return 1;
     }
 
     /* reduce our privileges */
     reduceToSysAdmin();
 
     /* source and destination must be real paths */
-    ni.source = realpath(argv[1], NULL);
+    ni.source = realpath(ni.source, NULL);
     if (ni.source == NULL) {
         perror(argv[1]);
         return 1;
     }
-    ni.dest = realpath(argv[2], NULL);
+    ni.dest = realpath(ni.dest, NULL);
     if (ni.dest == NULL) {
         perror(argv[2]);
         return 1;
@@ -87,10 +126,20 @@ int main(int argc, char **argv)
     /* so that /proc/self/fd is readable and not root-owned, self-exec */
     if (stat("/proc/self/fd", &sbuf) == 0) {
         if (sbuf.st_uid == 0) {
+            char **nargv;
             char buf[128];
+            nargv = malloc((argc + 3) * sizeof(char *));
+            if (!nargv) {
+                perror("malloc");
+                return 1;
+            }
             snprintf(buf, 128, "%d", ni.notifFd);
-            execl("/proc/self/exe", argv[0], ni.source, ni.dest, buf, NULL);
-            perror("execl");
+            for (argi = 0; argi < argc; argi++) nargv[argi] = argv[argi];
+            nargv[argi++] = "--notification-fd";
+            nargv[argi++] = buf;
+            nargv[argi++] = NULL;
+            execv("/proc/self/exe", nargv);
+            perror("execv");
             return 1;
         }
     }
@@ -136,7 +185,7 @@ int main(int argc, char **argv)
         NotifyQueue *ev;
 
         /* wait for 10 seconds of messages */
-        sleep(10);
+        sleep(ni.waitAfterNotif);
         fprintf(stderr, "Incremental backup.\n");
         do {
             pthread_mutex_lock(&ni.qlock);
@@ -161,7 +210,18 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void reduceToSysAdmin()
+/* usage statement */
+static void usage()
+{
+    fprintf(stderr, "Use: nibackup [options] <source> <target>\n"
+                    "Options:\n"
+                    "  -w|--notification-wait <time>:\n"
+                    "      Wait <time> seconds after notifications arrive before syncing.\n"
+                    "  -F|--full-sync-cycle <time>:\n"
+                    "      Perform a full sync every <time> seconds.\n");
+}
+
+static void reduceToSysAdmin()
 {
     if (geteuid() == 0) {
         cap_t caps;
@@ -234,7 +294,7 @@ void reduceToSysAdmin()
 }
 
 /* get rid of our final capability */
-void reduceToUser()
+static void reduceToUser()
 {
     cap_t caps;
 
@@ -259,14 +319,14 @@ void reduceToUser()
 }
 
 /* method to trigger a full update occasionally */
-void *periodicFull(void *nivp)
+static void *periodicFull(void *nivp)
 {
     NiBackup *ni = (NiBackup *) nivp;
 
     while (1) {
         NotifyQueue *ev;
 
-        sleep(21600);
+        sleep(ni->fullSyncCycle);
 
         ev = malloc(sizeof(NotifyQueue));
         if (ev == NULL) continue;

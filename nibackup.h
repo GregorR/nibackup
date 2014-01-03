@@ -31,6 +31,9 @@ struct NiBackup_ {
     const char *dest;
     int destFd;
 
+    int waitAfterNotif;
+    int fullSyncCycle;
+
     pthread_mutex_t qlock;
     sem_t qsem;
     NotifyQueue *notifs, *lastNotif;
