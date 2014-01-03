@@ -279,6 +279,8 @@ static void usage()
                     "      Perform a full sync every <time> seconds.\n"
                     "  -.|--no-root-dotfiles:\n"
                     "      Do not back up dotfiles in the root of <source> (useful for homedirs).\n"
+                    "  -j|--threads <threads>:\n"
+                    "      Use <threads> threads for backup.\n"
                     "  -v|--verbose:\n"
                     "      Be more verbose.\n");
 }
