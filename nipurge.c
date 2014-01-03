@@ -29,6 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "arg.h"
 #include "metadata.h"
 
 #define SF(into, func, bad, err, args) do { \
@@ -41,6 +42,12 @@
 
 static size_t direntLen;
 
+/* FIXME: this should not be a global */
+static int dryRun = 0;
+
+/* usage statement */
+static void usage(void);
+
 /* purge this directory */
 static void purgeDir(long long maxAge, int dirfd);
 
@@ -49,21 +56,42 @@ static void purge(long long maxAge, int dirfd, char *name);
 
 int main(int argc, char **argv)
 {
-    const char *backupDir;
-    long long maxAge, oldest;
-    int fd;
+    const char *backupDir = NULL;
+    long long maxAge = -1, oldest;
+    int fd, argi;
     long name_max;
 
-    if (argc != 3) {
-        fprintf(stderr, "Use: nibackup-purge <backup directory> <maximum age>\n");
-        return 1;
+    for (argi = 0; argi < argc; argi++) {
+        char *arg = argv[argi];
+
+        if (arg[0] == '-') {
+            ARG(n, dry-run) {
+                dryRun = 1;
+
+            } else {
+                usage();
+                return 1;
+
+            }
+
+        } else {
+            if (!backupDir) {
+                backupDir = arg;
+
+            } else if (maxAge < 0) {
+                maxAge = atoll(arg);
+                if (maxAge <= 0 && strcmp(arg, "0")) {
+                    fprintf(stderr, "Invalid age\n");
+                    return 1;
+                }
+
+            }
+
+        }
     }
 
-    backupDir = argv[1];
-    maxAge = atoll(argv[2]);
-
-    if (maxAge <= 0 && strcmp(argv[2], "0")) {
-        fprintf(stderr, "Invalid age!\n");
+    if (!backupDir || maxAge < 0) {
+        usage();
         return 1;
     }
 
@@ -82,6 +110,15 @@ int main(int argc, char **argv)
     purgeDir(oldest, fd);
 
     return 0;
+}
+
+/* usage statement */
+void usage()
+{
+    fprintf(stderr, "Use: nibackup-purge [options] <backup> <maximum age>\n"
+                    "Options:\n"
+                    "  -n|--dry-run:\n"
+                    "      Just say what would be purged, don't purge.\n");
 }
 
 /* purge this directory */
@@ -174,6 +211,14 @@ void purge(long long oldest, int dirfd, char *name)
             if (meta.type == MD_TYPE_NONEXIST) oldIncr = ii;
             else break;
         } else break;
+    }
+
+    if (oldIncr == 0) goto done;
+
+    /* maybe just say what we would have done */
+    if (dryRun) {
+        fprintf(stderr, "Purge %s <= %llu%s\n", name, oldIncr, (oldIncr == curIncr) ? " (all)" : "");
+        goto done;
     }
 
     /* delete all the old increments */
