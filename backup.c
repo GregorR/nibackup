@@ -397,8 +397,8 @@ int backupPath(NiBackup *ni, char *name, int source, int destDir)
     }
 
 done:
-    if (ffd >= 0) close(ffd);
     if (ifd >= 0) close(ifd);
+    if (ffd >= 0) close(ffd);
     free(pseudo);
     free(pseudo2);
 

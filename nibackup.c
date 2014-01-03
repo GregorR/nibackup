@@ -55,7 +55,7 @@ int main(int argc, char **argv)
               cycleTh,
               fullTh;
     struct stat sbuf;
-    int tmpi, argi;
+    int tmpi, argi, verbose = 0;
 
     ni.source = NULL;
     ni.dest = NULL;
@@ -78,6 +78,9 @@ int main(int argc, char **argv)
             } else ARGN(@, notification-fd) {
                 arg = argv[++argi];
                 ni.notifFd = atoi(arg);
+
+            } else ARG(v, verbose) {
+                verbose = 1;
 
             } else {
                 usage();
@@ -200,6 +203,7 @@ int main(int argc, char **argv)
             pthread_mutex_unlock(&ni.qlock);
 
             if (ev->file) {
+                if (verbose) fprintf(stderr, "%s\n", ev->file);
                 backupContaining(&ni, ev->file);
                 free(ev->file);
             } else {

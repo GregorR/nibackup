@@ -53,7 +53,7 @@ int notifyInit(NiBackup *ni, int fd)
         /* and mark all events under the source */
         tmpi = fanotify_mark(
             fd, FAN_MARK_ADD | FAN_MARK_MOUNT,
-            FAN_CLOSE_WRITE | FAN_MODIFY | FAN_ONDIR | FAN_EVENT_ON_CHILD,
+            FAN_CLOSE_WRITE | /*FAN_MODIFY |*/ FAN_ONDIR | FAN_EVENT_ON_CHILD,
             FAN_NOFD, ni->source);
         if (tmpi < 0) {
             perror("fanotify_mark");
