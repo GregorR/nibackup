@@ -33,5 +33,7 @@ int writeMetadata(BackupMetadata *meta, int dirfd, const char *name);
 /* Compare metadata. Returns 0 if equal, 1 otherwise. */
 int cmpMetadata(BackupMetadata *l, BackupMetadata *r);
 
+/* utility function to copy a file sparsely */
+int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname);
 
 #endif

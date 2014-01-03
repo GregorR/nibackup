@@ -11,6 +11,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "metadata.h"
+
 #define SF(into, func, bad, err, args) do { \
     (into) = func args; \
     if ((into) == (bad)) { \
@@ -138,11 +140,20 @@ void purge(long long oldest, int dirfd, char *name)
         pseudo[2] = 'm';
         sprintf(pseudoD, "/%llu.old", oldIncr);
         if (fstatat(dirfd, pseudo, &sbuf, 0) == 0) {
-            if (sbuf.st_mtime <= oldest) {
-                fprintf(stderr, "%s %d\n", name, (int) oldIncr);
+            if (sbuf.st_mtime < oldest) {
                 /* this is old enough to purge */
                 break;
             }
+        }
+    }
+
+    /* if the latest valid increment is dead, check if it was deleted */
+    if (oldIncr == curIncr - 1) {
+        BackupMetadata meta;
+        pseudo[2] = 'm';
+        sprintf(pseudoD, "/%llu.new", curIncr);
+        if (readMetadata(&meta, dirfd, pseudo) == 0) {
+            if (meta.type == MD_TYPE_NONEXIST) oldIncr = curIncr;
         }
     }
 
@@ -150,12 +161,12 @@ void purge(long long oldest, int dirfd, char *name)
     for (ii = oldIncr; ii > 0; ii--) {
         /* metadata */
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.old", ii);
+        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
         unlinkat(dirfd, pseudo, 0);
 
         /* and content */
         pseudo[2] = 'c';
-        sprintf(pseudoD, "/%llu.old", ii);
+        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
         unlinkat(dirfd, pseudo, 0);
         sprintf(pseudoD, "/%llu.bsp", ii);
         unlinkat(dirfd, pseudo, 0);

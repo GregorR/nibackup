@@ -126,9 +126,14 @@ int main(int argc, char **argv)
             ni.notifs = ev->next;
             pthread_mutex_unlock(&ni.qlock);
 
-            backupContaining(&ni, ev->file);
+            if (ev->file) {
+                backupContaining(&ni, ev->file);
+                free(ev->file);
+            } else {
+                fprintf(stderr, "Periodic full sync.\n");
+                backupRecursive(&ni, ni.sourceFd, ni.destFd);
+            }
 
-            free(ev->file);
             free(ev);
         } while (sem_trywait(&ni.qsem) == 0);
     }
