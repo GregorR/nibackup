@@ -31,14 +31,23 @@ struct NiBackup_ {
     const char *dest;
     int destFd;
 
+    /* configuration */
     int waitAfterNotif;
     int fullSyncCycle;
     int noRootDotfiles;
+    int threads;
 
+    /* notification thread info */
     pthread_mutex_t qlock;
     sem_t qsem;
     NotifyQueue *notifs, *lastNotif;
     int notifFd;
+
+    /* threads for actual backup */
+    sem_t bsem;
+    pthread_mutex_t *blocks;
+    pthread_t *bth;
+    int *brunning;
 };
 typedef struct NiBackup_ NiBackup;
 

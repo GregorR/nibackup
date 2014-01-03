@@ -34,6 +34,26 @@
 #include "metadata.h"
 #include "nibackup.h"
 
+/* arguments to the backupPath function */
+struct BackupPathArgs_ {
+    NiBackup *ni;
+    char *name;
+    int source;
+    int destDir;
+
+    int ti;
+};
+typedef struct BackupPathArgs_ BackupPathArgs;
+
+/* back up a specified path */
+static int backupPath(NiBackup *ni, char *name, int source, int destDir);
+
+/* backupPath, thread version */
+static void *backupPathTh(void *bpavp);
+
+/* call backupPath in an available thread, or block 'til one is available */
+static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir);
+
 /* utility function to call bsdiff, returning 0 if it succeeds */
 static int bsdiff(const char *from, const char *to, const char *patch);
 
@@ -144,7 +164,7 @@ void backupContaining(NiBackup *ni, char *path)
 {
     int source = -1, dest = -1,
         newSource = -1, newDest = -1;
-    char *part, *saveptr;
+    char *part, *nextPart, *saveptr;
 
     /* first off, remove the source */
     if (strncmp(path, ni->source, ni->sourceLen)) goto done;
@@ -161,9 +181,9 @@ void backupContaining(NiBackup *ni, char *path)
     dest = dup(ni->destFd);
     if (dest < 0) goto done;
 
-    while ((part = strtok_r(path, "/", &saveptr))) {
-        path = NULL;
+    part = strtok_r(path, "/", &saveptr);
 
+    while ((nextPart = strtok_r(NULL, "/", &saveptr))) {
         /* back it up */
         newDest = backupPath(ni, part, source, dest);
         close(dest);
@@ -179,6 +199,14 @@ void backupContaining(NiBackup *ni, char *path)
             close(source);
             source = newSource;
         }
+
+        part = nextPart;
+    }
+
+    /* and back up the final component in a thread */
+    if (part) {
+        backupPathInThread(ni, part, source, dest);
+        return; /* backupPathInThread will close */
     }
 
 done:
@@ -190,7 +218,7 @@ static const char pseudos[] = "cmd"; /* content, metadata, directory */
 
 /* back up this path, returning an open fd to the backup directory if
  * applicable */
-int backupPath(NiBackup *ni, char *name, int source, int destDir)
+static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 {
     char *pseudo = NULL, *pseudoD, *pseudo2, *pseudo2D;
     int i, ifd = -1, ffd = -1, rfd = -1, wroteData = 0;
@@ -409,6 +437,66 @@ done:
     free(pseudo2);
 
     return rfd;
+}
+
+/* backupPath, thread version */
+static void *backupPathTh(void *bpavp)
+{
+    BackupPathArgs *bpa = (BackupPathArgs *) bpavp;
+
+    /* perform the actual backup */
+    backupPath(bpa->ni, bpa->name, bpa->source, bpa->destDir);
+
+    /* then mark ourself done */
+    pthread_mutex_lock(&bpa->ni->blocks[bpa->ti]);
+    bpa->ni->brunning[bpa->ti] = 0;
+    pthread_mutex_unlock(&bpa->ni->blocks[bpa->ti]);
+    sem_post(&bpa->ni->bsem);
+
+    /* and close stuff */
+    close(bpa->source);
+    close(bpa->destDir);
+
+    free(bpa);
+}
+
+/* call backupPath in an available thread, or block 'til one is available */
+static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir)
+{
+    int ti;
+    BackupPathArgs *bpa = malloc(sizeof(BackupPathArgs));
+    if (!bpa) {
+        /* FIXME */
+        return;
+    }
+
+    bpa->ni = ni;
+    bpa->name = name;
+    bpa->source = source;
+    bpa->destDir = destDir;
+
+    /* wait until a thread is free */
+    sem_wait(&ni->bsem);
+
+    /* and start it */
+    for (ti = 0; ti < ni->threads; ti++) {
+        pthread_mutex_lock(&ni->blocks[ti]);
+        if (!ni->brunning[ti]) {
+            /* not running, take it */
+            ni->brunning[ti] = 1;
+            pthread_create(&ni->bth[ti], NULL, backupPathTh, bpa);
+            pthread_mutex_unlock(&ni->blocks[ti]);
+            break;
+        }
+        pthread_mutex_unlock(&ni->blocks[ti]);
+    }
+
+    if (ti == ni->threads) {
+        /* FIXME: this should never happen */
+        free(bpa);
+        close(source);
+        close(destDir);
+    }
 }
 
 /* utility function to call bsdiff, returning 0 if it succeeds */

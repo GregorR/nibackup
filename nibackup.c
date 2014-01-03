@@ -55,13 +55,14 @@ int main(int argc, char **argv)
               cycleTh,
               fullTh;
     struct stat sbuf;
-    int tmpi, argi, verbose = 0;
+    int i, tmpi, argi, verbose = 0;
 
     ni.source = NULL;
     ni.dest = NULL;
     ni.waitAfterNotif = 10;
     ni.fullSyncCycle = 21600;
     ni.noRootDotfiles = 0;
+    ni.threads = 16;
     ni.notifFd = -1;
 
     for (argi = 1; argi < argc; argi++) {
@@ -78,6 +79,11 @@ int main(int argc, char **argv)
 
             } else ARG(., no-root-dotfiles) {
                 ni.noRootDotfiles = 1;
+
+            } else ARGN(j, threads) {
+                arg = argv[++argi];
+                ni.threads = atoi(arg);
+                if (ni.threads <= 0) ni.threads = 1;
 
             } else ARG(v, verbose) {
                 verbose = 1;
@@ -191,6 +197,39 @@ int main(int argc, char **argv)
 
     /* and schedule full backups */
     pthread_create(&cycleTh, NULL, periodicFull, &ni);
+
+    /* make the threads for continuous backup */
+    if (ni.threads > 1) {
+        if (sem_init(&ni.bsem, 0, 0) < 0) {
+            perror("sem_init");
+            return 1;
+        }
+        for (i = 0; i < ni.threads; i++) {
+            sem_post(&ni.bsem);
+        }
+        ni.blocks = malloc(ni.threads * sizeof(pthread_mutex_t));
+        if (ni.blocks == NULL) {
+            perror("malloc");
+            return 1;
+        }
+        ni.bth = malloc(ni.threads * sizeof(pthread_t));
+        if (ni.bth == NULL) {
+            perror("malloc");
+            return 1;
+        }
+        ni.brunning = malloc(ni.threads * sizeof(int));
+        if (ni.brunning == NULL) {
+            perror("malloc");
+            return 1;
+        }
+        for (i = 0; i < ni.threads; i++) {
+            if (pthread_mutex_init(&ni.blocks[i], NULL) < 0) {
+                perror("pthraed_mutex_init");
+                return 1;
+            }
+            ni.brunning[i] = 0;
+        }
+    }
 
     /* then continuous backup */
     fprintf(stderr, "Entering continuous mode.\n");
