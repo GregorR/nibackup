@@ -145,8 +145,19 @@ void *notifyLoop(void *nivp)
                     if (realPath) {
                         ssize_t rllen = readlink(pathBuf, realPath, lsb.st_size);
                         if (rllen > 0) {
+                            size_t len;
+
                             /* got the real path */
                             realPath[rllen] = 0;
+
+                            /* check for /proc's confusing " (deleted)" thing */
+                            len = strlen(realPath);
+                            if (len > 10 && !strcmp(realPath + len - 10, " (deleted)")) {
+                                /* get rid of it */
+                                len -= 10;
+                                realPath[len] = 0;
+                            }
+
                             enqueue(ni, realPath);
                         } else {
                             free(realPath);
