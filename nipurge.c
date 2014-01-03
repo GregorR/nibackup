@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     int fd, argi;
     long name_max;
 
-    for (argi = 0; argi < argc; argi++) {
+    for (argi = 1; argi < argc; argi++) {
         char *arg = argv[argi];
 
         if (arg[0] == '-') {
