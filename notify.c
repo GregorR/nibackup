@@ -140,10 +140,10 @@ void *notifyLoop(void *nivp)
 
                 sprintf(pathBuf, "/proc/self/fd/%d", metadata->fd);
                 if (lstat(pathBuf, &lsb) != -1) {
-                    realPath = malloc(lsb.st_size + 1);
+                    realPath = malloc(4096); /* FIXME: Arbitrary, st_size seems wrong */
                     /* FIXME */
                     if (realPath) {
-                        ssize_t rllen = readlink(pathBuf, realPath, lsb.st_size);
+                        ssize_t rllen = readlink(pathBuf, realPath, 4095);
                         if (rllen > 0) {
                             size_t len;
 
