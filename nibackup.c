@@ -57,8 +57,7 @@ static void *periodicFull(void *nivp);
 int main(int argc, char **argv)
 {
     NiBackup ni;
-    pthread_t notifTh,
-              cycleTh,
+    pthread_t cycleTh,
               fullTh;
     struct stat sbuf;
     int i, tmpi, argi;
@@ -71,8 +70,10 @@ int main(int argc, char **argv)
     ni.fullSyncCycle = 21600;
     ni.noRootDotfiles = 0;
     ni.threads = 16;
-    ni.notifFd = -1;
+    ni.maxInotifyWatches = 1024;
     ni.maxbsdiff = 33554432;
+
+    ni.fanotifFd = ni.inotifFd = -1;
 
     for (argi = 1; argi < argc; argi++) {
         char *arg = argv[argi];
@@ -106,9 +107,11 @@ int main(int argc, char **argv)
                 arg = argv[++argi];
                 ni.verbose = atoi(arg);
 
-            } else ARGLN(notification-fd) {
+            } else if (argc > argi+2 && ARGLC(notification-fds)) {
                 arg = argv[++argi];
-                ni.notifFd = atoi(arg);
+                ni.fanotifFd = atoi(arg);
+                arg = argv[++argi];
+                ni.inotifFd = atoi(arg);
 
             } else {
                 usage();
@@ -155,7 +158,7 @@ int main(int argc, char **argv)
     ni.destLen = strlen(ni.dest);
 
     /* start the notify monitor */
-    notifyInit(&ni, ni.notifFd);
+    notifyInit(&ni);
 
     /* reduce our privileges more */
     reduceToUser();
@@ -164,16 +167,18 @@ int main(int argc, char **argv)
     if (stat("/proc/self/fd", &sbuf) == 0) {
         if (sbuf.st_uid == 0) {
             char **nargv;
-            char buf[128];
-            nargv = malloc((argc + 3) * sizeof(char *));
+            char fbuf[128], ibuf[128];
+            nargv = malloc((argc + 4) * sizeof(char *));
             if (!nargv) {
                 perror("malloc");
                 return 1;
             }
-            snprintf(buf, 128, "%d", ni.notifFd);
+            snprintf(fbuf, 128, "%d", ni.fanotifFd);
+            snprintf(ibuf, 128, "%d", ni.inotifFd);
             for (argi = 0; argi < argc; argi++) nargv[argi] = argv[argi];
-            nargv[argi++] = "--notification-fd";
-            nargv[argi++] = buf;
+            nargv[argi++] = "--notification-fds";
+            nargv[argi++] = fbuf;
+            nargv[argi++] = ibuf;
             nargv[argi++] = NULL;
             execv("/proc/self/exe", nargv);
             perror("execv");
@@ -182,13 +187,22 @@ int main(int argc, char **argv)
     }
 
     /* now we can safely make the notify fd cloexec */
-    tmpi = fcntl(ni.notifFd, F_GETFD);
+    tmpi = fcntl(ni.fanotifFd, F_GETFD);
     if (tmpi < 0) {
-        perror("notify");
+        perror("fanotify");
         return 1;
     }
-    if (fcntl(ni.notifFd, F_SETFD, tmpi | FD_CLOEXEC) < 0) {
-        perror("notify");
+    if (fcntl(ni.fanotifFd, F_SETFD, tmpi | FD_CLOEXEC) < 0) {
+        perror("fanotify");
+        return 1;
+    }
+    tmpi = fcntl(ni.inotifFd, F_GETFD);
+    if (tmpi < 0) {
+        perror("inotify");
+        return 1;
+    }
+    if (fcntl(ni.inotifFd, F_SETFD, tmpi | FD_CLOEXEC) < 0) {
+        perror("inotify");
         return 1;
     }
 
@@ -212,7 +226,7 @@ int main(int argc, char **argv)
     }
 
     /* and the notify thread */
-    pthread_create(&notifTh, NULL, notifyLoop, &ni);
+    notifyThread(&ni);
 
     backupInit(ni.sourceFd);
 
@@ -289,6 +303,7 @@ int main(int argc, char **argv)
             evn = ev->next;
             free(ev);
             ev = evn;
+            if (ev) sem_wait(&ni.qsem);
         }
 
         if (ni.verbose >= VERBOSITY_INCREMENTAL) {
@@ -298,7 +313,6 @@ int main(int argc, char **argv)
         }
     }
 
-    pthread_join(notifTh, NULL);
     pthread_join(cycleTh, NULL);
     pthread_join(fullTh, NULL);
 

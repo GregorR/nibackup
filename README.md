@@ -9,11 +9,9 @@ It watches the filesystem with fanotify to continuously back up files, as well
 as performing complete backups at preset intervals. The entire history of every
 file is saved with reverse binary diffs using the venerable `bsdiff`.
 
-NiBackup is based on the (Linux-specific) fanotify interface, which is in turn
-an improvement in some ways on the inotify interface. This means it detects
-changes *as they happen* on the filesystem, and keeps continuous, incremental
-backups. Unlike inotify, fanotify monitors the entire filesystem. NiBackup
-itself backs up a particular, specified directory.
+NiBackup is based on the (Linux-specific) fanotify and inotify interfaces. This
+means it detects changes *as they happen* on the filesystem, and keeps
+continuous, incremental backups.
 
 NiBackup is currently in a beta stage. I'm using it for my own backup, and
 making it publicly available, but there are some improvements yet to be made.
@@ -30,10 +28,10 @@ nibackup-restore.
 
 nibackup is the daemon. Running it is very simple:
 `sudo nibackup <directory to back up> <backup directory>`.
-It will start with a full synchronization, then use fanotify to watch for
-future changes. Additional options are available to control wait times, ignore
-dotfiles, etc. `sudo` is necessary to use fanotify: nibackup will drop its root
-privileges as soon as it can.
+It will start with a full synchronization, then use fanotify and inotify to
+watch for future changes. Additional options are available to control wait
+times, ignore dotfiles, etc. `sudo` is necessary to use fanotify: nibackup will
+drop its root privileges as soon as it can.
 
 nibackup-purge purges old data from a backup.
 `nibackup-purge -a <age> <backup>`
@@ -59,17 +57,21 @@ of files are stored with reverse binary diffs, so it is always safe to remove
 old versions from the backup.
 
 It does not support hard links (will back them up as separate files) or special
-files such as devices, and does not recognize moves as moves, partially because
-fanotify does not support moves.
+files such as devices, and does not recognize moves as moves.
 
-For continuous backup, NiBackup uses fanotify. fanotify is very limited: In
-particular, it does not not notify on file renames or removes. NiBackup runs a
-periodic full synchronization to make up for this fact, but as a result, if you
-recover a backup from an intermediate time, it may e.g. restore both names of a
-rename or restore a file that was actually deleted. Nothing it does is (or can
-be) atomic, so the restore state is never guaranteed to be precisely what was
-on the disk at any given time, only the state of each file as it existed at
-some time.
+For continuous backup, NiBackup uses fanotify and inotify. fanotify is very
+limited: In particular, it does not not notify on file renames or removes.  To
+alleviate this, NiBackup additionally uses inotify watches on 1024
+recently-accessed directories.  inotify enforces a restriction on the number of
+watches available, so it is insufficient for watching an entire filesystem
+itself, but it does support more filesystem changes than fanotify.
+
+NiBackup runs a periodic full synchronization to make up for the lacks of the
+notification systems, but as a result, if you recover a backup from an
+intermediate time, it may e.g. restore both names of a rename or restore a
+file that was actually deleted. Nothing it does is (or can be) atomic, so the
+restore state is never guaranteed to be precisely what was on the disk at any
+given time, only the state of each file as it existed at some time.
 
 
 Technical

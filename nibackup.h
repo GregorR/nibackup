@@ -37,13 +37,15 @@ struct NiBackup_ {
     int fullSyncCycle;
     int noRootDotfiles;
     int threads;
+    int maxInotifyWatches;
     long long maxbsdiff;
 
     /* notification thread info */
+    pthread_t fanotifTh, inotifTh;
     pthread_mutex_t qlock;
     sem_t qsem;
     NotifyQueue *notifs, *lastNotif;
-    int notifFd;
+    int fanotifFd, inotifFd;
 
     /* threads for actual backup */
     sem_t bsem;

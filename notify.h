@@ -11,9 +11,9 @@ struct NotifyQueue_ {
 typedef struct NotifyQueue_ NotifyQueue;
 
 /* initialize the notification queue for this instance */
-int notifyInit(struct NiBackup_ *ni, int fd);
+void notifyInit(struct NiBackup_ *ni);
 
-/* the notification loop */
-void *notifyLoop(void *nivp);
+/* start the notification thread(s) */
+void notifyThread(struct NiBackup_ *ni);
 
 #endif
