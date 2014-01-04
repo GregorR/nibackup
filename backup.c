@@ -484,6 +484,7 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
         if (!ni->brunning[ti]) {
             /* not running, take it */
             ni->brunning[ti] = 1;
+            bpa->ti = ti;
             pthread_create(&ni->bth[ti], NULL, backupPathTh, bpa);
             pthread_mutex_unlock(&ni->blocks[ti]);
             break;
