@@ -37,6 +37,10 @@
 #include "nibackup.h"
 #include "notify.h"
 
+#define VERBOSITY_FULL_SYNC 1
+#define VERBOSITY_INCREMENTAL 2
+#define VERBOSITY_FILE 3
+
 /* usage statement */
 static void usage(void);
 
@@ -93,8 +97,9 @@ int main(int argc, char **argv)
                 ni.threads = atoi(arg);
                 if (ni.threads <= 0) ni.threads = 1;
 
-            } else ARG(v, verbose) {
-                ni.verbose = 1;
+            } else ARGN(v, verbose) {
+                arg = argv[++argi];
+                ni.verbose = atoi(arg);
 
             } else ARGN(@, notification-fd) {
                 arg = argv[++argi];
@@ -254,7 +259,7 @@ int main(int argc, char **argv)
 
         /* wait for 10 seconds of messages */
         sleep(ni.waitAfterNotif);
-        if (ni.verbose) fprintf(stderr, "Incremental backup.\n");
+        if (ni.verbose >= VERBOSITY_INCREMENTAL) fprintf(stderr, "Incremental backup.\n");
 
         /* pull off current messages */
         pthread_mutex_lock(&ni.qlock);
@@ -263,15 +268,15 @@ int main(int argc, char **argv)
         pthread_mutex_unlock(&ni.qlock);
 
         /* then back them up */
-        if (ni.verbose) iStart = time(NULL);
+        if (ni.verbose >= VERBOSITY_INCREMENTAL) iStart = time(NULL);
         while (ev) {
             if (ev->file) {
-                if (ni.verbose) fprintf(stderr, "%s\n", ev->file);
+                if (ni.verbose >= VERBOSITY_FILE) fprintf(stderr, "%s\n", ev->file);
                 backupContaining(&ni, ev->file);
                 free(ev->file);
             } else {
                 if (pthread_tryjoin_np(fullTh, NULL) == 0) {
-                    if (ni.verbose) fprintf(stderr, "Starting full sync.\n");
+                    if (ni.verbose >= VERBOSITY_FULL_SYNC) fprintf(stderr, "Starting full sync.\n");
                     pthread_create(&fullTh, NULL, fullBackup, &ni);
                 }
             }
@@ -281,7 +286,7 @@ int main(int argc, char **argv)
             ev = evn;
         }
 
-        if (ni.verbose) {
+        if (ni.verbose >= VERBOSITY_INCREMENTAL) {
             iEnd = time(NULL);
             fprintf(stderr, "Finished incremental backup in %d seconds.\n",
                 (int) (iEnd - iStart));
@@ -417,9 +422,9 @@ static void *fullBackup(void *nivp)
 {
     time_t fStart, fEnd;
     NiBackup *ni = (NiBackup *) nivp;
-    if (ni->verbose) fStart = time(NULL);
+    if (ni->verbose >= VERBOSITY_FULL_SYNC) fStart = time(NULL);
     backupRecursive(ni);
-    if (ni->verbose) {
+    if (ni->verbose >= VERBOSITY_FULL_SYNC) {
         fEnd = time(NULL);
         fprintf(stderr, "Finished full sync in %d seconds.\n", (int) (fEnd - fStart));
     }
