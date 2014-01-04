@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS=-Wall -Werror -std=c99 -pedantic -g
-#CFLAGS=-O3 -g
+#CFLAGS=-Wall -Werror -std=c99 -pedantic -g
+CFLAGS=-O3 -g
 LIBS=-pthread -lcap
 
 NIBACKUP_OBJS=backup.o exclude.o metadata.o nibackup.o notify.o
