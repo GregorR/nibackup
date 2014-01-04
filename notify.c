@@ -18,6 +18,7 @@
 
 #define _XOPEN_SOURCE 700 /* for lstat */
 
+#include <errno.h>
 #include <linux/fcntl.h>
 #include <linux/limits.h>
 #include <pthread.h>
@@ -241,8 +242,15 @@ static InotifyWatch *newWatch(NiBackup *ni, char *path)
 
     /* now set up this one */
     ret->path = path;
-    ret->id = inotify_add_watch(ni->inotifFd, path,
-        IN_ATTRIB | IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MOVED_FROM | IN_MOVED_TO);
+#define INOTIFY_MODE (IN_ATTRIB | IN_CLOSE_WRITE | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MOVED_FROM | IN_MOVED_TO)
+    ret->id = inotify_add_watch(ni->inotifFd, path, INOTIFY_MODE);
+    if (ret->id < 0 && errno == ENOSPC) {
+        /* just out of watches, try clearing one */
+        if (watchesLRUHead.lruNext->path)
+            delWatch(ni, watchesLRUHead.lruNext);
+        ret->id = inotify_add_watch(ni->inotifFd, path, INOTIFY_MODE);
+    }
+#undef INOTIFY_MODE
     if (ret->id < 0) {
         free(path);
         free(ret);
