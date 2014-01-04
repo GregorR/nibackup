@@ -90,6 +90,6 @@ upwards.
 * nic: Directory containing the file content for regular files, or link target
        for symlinks, for each increment. The newest increment is stored plain
        as `<increment>.dat`. Older increments are either stored as bsdiff
-       patches (`<increment>.bsp`) or, if that fails, plain
-       (`<increment>.dat`).
+       patches (`<increment>.bsp`), xdelta3 patches (`<increment>.x3p`) or, if
+       that fails, plain (`<increment>.dat`).
 * nid: Directory containing backups of every path in the backed up directory.
