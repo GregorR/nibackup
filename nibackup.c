@@ -28,6 +28,7 @@
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "arg.h"
@@ -236,6 +237,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "Entering continuous mode.\n");
     while (sem_wait(&ni.qsem) == 0) {
         NotifyQueue *ev, *evn;
+        time_t iStart, iEnd;
 
         /* wait for 10 seconds of messages */
         sleep(ni.waitAfterNotif);
@@ -248,6 +250,7 @@ int main(int argc, char **argv)
         pthread_mutex_unlock(&ni.qlock);
 
         /* then back them up */
+        if (ni.verbose) iStart = time(NULL);
         while (ev) {
             if (ev->file) {
                 if (ni.verbose) fprintf(stderr, "%s\n", ev->file);
@@ -265,7 +268,11 @@ int main(int argc, char **argv)
             ev = evn;
         }
 
-        if (ni.verbose) fprintf(stderr, "Finished incremental backup.\n");
+        if (ni.verbose) {
+            iEnd = time(NULL);
+            fprintf(stderr, "Finished incremental backup in %d seconds.\n",
+                (int) (iEnd - iStart));
+        }
     }
 
     pthread_join(notifTh, NULL);
@@ -393,9 +400,14 @@ static void reduceToUser()
 /* background function for full backup */
 static void *fullBackup(void *nivp)
 {
+    time_t fStart, fEnd;
     NiBackup *ni = (NiBackup *) nivp;
+    if (ni->verbose) fStart = time(NULL);
     backupRecursive(ni, ni->sourceFd, ni->destFd);
-    if (ni->verbose) fprintf(stderr, "Finished full sync.\n");
+    if (ni->verbose) {
+        fEnd = time(NULL);
+        fprintf(stderr, "Finished full sync in %d seconds.\n", (int) (fEnd - fStart));
+    }
 }
 
 /* method to trigger a full update occasionally */
