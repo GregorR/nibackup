@@ -68,6 +68,9 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
 /* utility function to call bspatch, returning 0 if it succeeds */
 static int bspatch(const char *from, const char *to, const char *patch);
 
+/* utility function to call xdelta3 -d, returning 0 if it succeeds */
+static int xdelta3d(const char *from, const char *to, const char *patch);
+
 int main(int argc, char **argv)
 {
     const char *backupDir = NULL, *targetDir = NULL;
@@ -379,9 +382,9 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
     }
 
     /* copy in this version */
-    ifd = openat(sourceDir, name, O_RDONLY);
+    ifd = openat(sourceDir, pseudo, O_RDONLY);
     if (ifd < 0) {
-        perror(name);
+        perror(pseudo);
         goto done;
     }
     if (copySparse(ifd, targetDir, name) != 0) {
@@ -408,16 +411,23 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
             fdb = openat(targetDir, name, O_RDWR);
 
             if (fdb >= 0) {
+                int useBsdiff = 1;
                 sprintf(bBuf, "/proc/self/fd/%d", fdb);
 
-                /* and the patch */
+                /* and the patch, in bsdiff or xdelta3 format */
                 sprintf(pseudoD, "/%llu.bsp", ii);
                 fdp = openat(sourceDir, pseudo, O_RDONLY);
+                if (fdp < 0) {
+                    useBsdiff = 0;
+                    sprintf(pseudoD, "/%llu.x3p", ii);
+                    fdp = openat(sourceDir, pseudo, O_RDONLY);
+                }
 
                 if (fdp >= 0) {
                     sprintf(pBuf, "/proc/self/fd/%d", fdp);
 
-                    if (bspatch(aBuf, bBuf, pBuf) != 0) ret = -1;
+                    if ((useBsdiff ? bspatch : xdelta3d)
+                        (aBuf, bBuf, pBuf) != 0) ret = -1;
 
                     close(fdp);
                 } else {
@@ -459,6 +469,29 @@ static int bspatch(const char *from, const char *to, const char *patch)
     }
 
     /* wait for bspatch */
+    if (waitpid(pid, &status, 0) != pid)
+        return -1;
+    if (WEXITSTATUS(status) != 0)
+        return -1;
+    return 0;
+}
+
+/* utility function to call xdelta3 -d, returning 0 if it succeeds */
+static int xdelta3d(const char *from, const char *to, const char *patch)
+{
+    int status;
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+
+    if (pid == 0) {
+        /* child, call xdelta3 */
+        execlp("xdelta3", "xdelta3", "-d", "-f", "-s", from, patch, to, NULL);
+        perror("xdelta3");
+        exit(1);
+        abort();
+    }
+
+    /* wait for xdelta3 */
     if (waitpid(pid, &status, 0) != pid)
         return -1;
     if (WEXITSTATUS(status) != 0)

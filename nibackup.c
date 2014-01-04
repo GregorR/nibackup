@@ -72,6 +72,7 @@ int main(int argc, char **argv)
     ni.noRootDotfiles = 0;
     ni.threads = 16;
     ni.notifFd = -1;
+    ni.maxbsdiff = 33554432;
 
     for (argi = 1; argi < argc; argi++) {
         char *arg = argv[argi];
@@ -97,11 +98,15 @@ int main(int argc, char **argv)
                 ni.threads = atoi(arg);
                 if (ni.threads <= 0) ni.threads = 1;
 
+            } else ARGLN(max-bsdiff) {
+                arg = argv[++argi];
+                ni.maxbsdiff = atoll(arg);
+
             } else ARGN(v, verbose) {
                 arg = argv[++argi];
                 ni.verbose = atoi(arg);
 
-            } else ARGN(@, notification-fd) {
+            } else ARGLN(notification-fd) {
                 arg = argv[++argi];
                 ni.notifFd = atoi(arg);
 
@@ -136,12 +141,12 @@ int main(int argc, char **argv)
     /* source and destination must be real paths */
     ni.source = realpath(ni.source, NULL);
     if (ni.source == NULL) {
-        perror(argv[1]);
+        perror(ni.source);
         return 1;
     }
     ni.dest = realpath(ni.dest, NULL);
     if (ni.dest == NULL) {
-        perror(argv[2]);
+        perror(ni.dest);
         return 1;
     }
 
@@ -315,6 +320,8 @@ static void usage()
                     "      Do not back up dotfiles in the root of <source> (useful for homedirs).\n"
                     "  -j|--threads <threads>:\n"
                     "      Use <threads> threads for backup.\n"
+                    "  --max-bsdiff <bytes>:\n"
+                    "      Use xdelta for all files large than <bytes> bytes.\n"
                     "  -v|--verbose:\n"
                     "      Be more verbose.\n");
 }

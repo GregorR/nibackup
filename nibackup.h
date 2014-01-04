@@ -37,6 +37,7 @@ struct NiBackup_ {
     int fullSyncCycle;
     int noRootDotfiles;
     int threads;
+    long long maxbsdiff;
 
     /* notification thread info */
     pthread_mutex_t qlock;

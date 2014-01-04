@@ -255,6 +255,8 @@ void purge(long long oldest, int dirfd, char *name)
         unlinkat(dirfd, pseudo, 0);
         sprintf(pseudoD, "/%llu.bsp", ii);
         unlinkat(dirfd, pseudo, 0);
+        sprintf(pseudoD, "/%llu.x3p", ii);
+        unlinkat(dirfd, pseudo, 0);
     }
 
     /* now we may have gotten rid of the file entirely */

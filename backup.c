@@ -67,6 +67,9 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
 /* utility function to call bsdiff, returning 0 if it succeeds */
 static int bsdiff(const char *from, const char *to, const char *patch);
 
+/* utility function to call xdelta3 -e, returning 0 if it succeeds */
+static int xdelta3e(const char *from, const char *to, const char *patch);
+
 static size_t direntLen;
 
 /* initialization for the backup procedures */
@@ -241,11 +244,14 @@ void backupContaining(NiBackup *ni, char *path)
 
     /* and back up the final component in a thread */
     if (part && dest >= 0) {
+        char *nameDup;
         WRITE_BUFFER(fullName, part, strlen(part) + 1);
         if (excluded(ni, fullName.buf))
             goto done;
 
-        backupPathInThread(ni, part, source, dest);
+        nameDup = strdup(part);
+        if (nameDup == NULL) goto done;
+        backupPathInThread(ni, nameDup, source, dest);
 
         /* backupPathInThread will close */
         source = dest = -1;
@@ -270,6 +276,8 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     char incrBuf[4*sizeof(int)+1];
     ssize_t rd;
     BackupMetadata lastMeta, meta;
+
+    if (!strcmp(name, "")) abort();
 
     /* space for our pseudofiles: ni?<name>/<ull>.{old,new} */
     namelen = strlen(name);
@@ -421,10 +429,19 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* create the content patchfile */
     if (wroteData) {
+        int useBsdiff;
         int lastIncrFd, curIncrFd, patchFd;
         char lastIncrBuf[15+4*sizeof(int)];
         char curIncrBuf[15+4*sizeof(int)];
         char patchBuf[15+4*sizeof(int)];
+
+        /* decide whether to use bsdiff */
+        if (ni->maxbsdiff >= 0 &&
+            (lastMeta.size >= ni->maxbsdiff || meta.size >= ni->maxbsdiff)) {
+            useBsdiff = 0;
+        } else {
+            useBsdiff = 1;
+        }
 
         /* the current increment */
         pseudo[2] = 'c';
@@ -442,13 +459,14 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
                 sprintf(lastIncrBuf, "/proc/self/fd/%d", lastIncrFd);
 
                 /* and the patch */
-                sprintf(pseudoD, "/%llu.bsp", lastIncr);
+                sprintf(pseudoD, "/%llu.%s", lastIncr, useBsdiff ? "bsp" : "x3p");
                 patchFd = openat(destDir, pseudo, O_RDWR | O_CREAT | O_TRUNC, 0600);
 
                 if (patchFd >= 0) {
                     sprintf(patchBuf, "/proc/self/fd/%d", patchFd);
 
-                    if (bsdiff(curIncrBuf, lastIncrBuf, patchBuf) == 0) {
+                    if ((useBsdiff ? bsdiff : xdelta3e)
+                        (curIncrBuf, lastIncrBuf, patchBuf) == 0) {
                         /* remove the original */
                         sprintf(pseudoD, "/%llu.dat", lastIncr);
                         unlinkat(destDir, pseudo, 0);
@@ -488,6 +506,7 @@ static void *backupPathTh(void *bpavp)
     /* and close stuff */
     close(bpa->source);
     close(bpa->destDir);
+    free(bpa->name);
 
     free(bpa);
 
@@ -531,6 +550,7 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
     if (ti == ni->threads) {
         /* FIXME: this should never happen */
         free(bpa);
+        free(name);
         close(source);
         close(destDir);
     }
@@ -552,6 +572,29 @@ static int bsdiff(const char *from, const char *to, const char *patch)
     }
 
     /* wait for bsdiff */
+    if (waitpid(pid, &status, 0) != pid)
+        return -1;
+    if (WEXITSTATUS(status) != 0)
+        return -1;
+    return 0;
+}
+
+/* utility function to call xdelta3 -e, returning 0 if it succeeds */
+static int xdelta3e(const char *from, const char *to, const char *patch)
+{
+    int status;
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+
+    if (pid == 0) {
+        /* child, call xdelta */
+        execlp("xdelta3", "xdelta3", "-e", "-f", "-s", from, to, patch, NULL);
+        perror("xdelta3");
+        exit(1);
+        abort();
+    }
+
+    /* wait for xdelta */
     if (waitpid(pid, &status, 0) != pid)
         return -1;
     if (WEXITSTATUS(status) != 0)
