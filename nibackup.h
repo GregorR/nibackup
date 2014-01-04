@@ -49,6 +49,9 @@ struct NiBackup_ {
     pthread_mutex_t *blocks;
     pthread_t *bth;
     int *brunning;
+
+    /* exclusions */
+    struct Exclusion_ *exclusions;
 };
 typedef struct NiBackup_ NiBackup;
 

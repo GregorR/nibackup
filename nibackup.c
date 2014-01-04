@@ -33,6 +33,7 @@
 
 #include "arg.h"
 #include "backup.h"
+#include "exclude.h"
 #include "nibackup.h"
 #include "notify.h"
 
@@ -57,6 +58,7 @@ int main(int argc, char **argv)
               fullTh;
     struct stat sbuf;
     int i, tmpi, argi;
+    char *exclusionsFile = NULL;
 
     ni.source = NULL;
     ni.dest = NULL;
@@ -78,6 +80,10 @@ int main(int argc, char **argv)
             } else ARGN(F, full-sync-cycle) {
                 arg = argv[++argi];
                 ni.fullSyncCycle = atoi(arg);
+
+            } else ARGN(x, exclude-from) {
+                arg = argv[++argi];
+                exclusionsFile = arg;
 
             } else ARG(., no-root-dotfiles) {
                 ni.noRootDotfiles = 1;
@@ -188,6 +194,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* load our exclusions */
+    if (exclusionsFile) {
+        loadExclusions(&ni, exclusionsFile);
+    } else {
+        ni.exclusions = NULL;
+    }
+
     /* and the notify thread */
     pthread_create(&notifTh, NULL, notifyLoop, &ni);
 
@@ -291,6 +304,8 @@ static void usage()
                     "      Wait <time> seconds after notifications arrive before syncing.\n"
                     "  -F|--full-sync-cycle <time>:\n"
                     "      Perform a full sync every <time> seconds.\n"
+                    "  -x|--exclude-from <file>:\n"
+                    "      Load exclusions (fully-anchored regexes) from <file>.\n"
                     "  -.|--no-root-dotfiles:\n"
                     "      Do not back up dotfiles in the root of <source> (useful for homedirs).\n"
                     "  -j|--threads <threads>:\n"
@@ -403,11 +418,13 @@ static void *fullBackup(void *nivp)
     time_t fStart, fEnd;
     NiBackup *ni = (NiBackup *) nivp;
     if (ni->verbose) fStart = time(NULL);
-    backupRecursive(ni, ni->sourceFd, ni->destFd);
+    backupRecursive(ni);
     if (ni->verbose) {
         fEnd = time(NULL);
         fprintf(stderr, "Finished full sync in %d seconds.\n", (int) (fEnd - fStart));
     }
+
+    return NULL;
 }
 
 /* method to trigger a full update occasionally */
@@ -436,4 +453,6 @@ static void *periodicFull(void *nivp)
         pthread_mutex_unlock(&ni->qlock);
         sem_post(&ni->qsem);
     }
+
+    return NULL;
 }

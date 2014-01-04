@@ -3,7 +3,7 @@ CC=gcc
 CFLAGS=-O3 -g
 LIBS=-pthread -lcap
 
-NIBACKUP_OBJS=backup.o metadata.o nibackup.o notify.o
+NIBACKUP_OBJS=backup.o exclude.o metadata.o nibackup.o notify.o
 NIPURGE_OBJS=metadata.o nipurge.o
 NIRESTORE_OBJS=metadata.o nirestore.o
 

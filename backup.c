@@ -31,6 +31,8 @@
 #include <unistd.h>
 
 #include "backup.h"
+#include "buffer.h"
+#include "exclude.h"
 #include "metadata.h"
 #include "nibackup.h"
 
@@ -49,6 +51,9 @@ struct BackupPathArgs_ {
     int ti;
 };
 typedef struct BackupPathArgs_ BackupPathArgs;
+
+/* backupRecursive with cached full filename */
+static void backupRecursiveF(NiBackup *ni, int source, int dest, struct Buffer_char *fullName);
 
 /* back up a specified path */
 static int backupPath(NiBackup *ni, char *name, int source, int destDir);
@@ -75,34 +80,45 @@ void backupInit(int source)
 }
 
 /* recursively back up this path */
-void backupRecursive(NiBackup *ni, int source, int dest)
+void backupRecursive(NiBackup *ni)
+{
+    struct Buffer_char fullName;
+
+    INIT_BUFFER(fullName);
+    backupRecursiveF(ni, ni->sourceFd, ni->destFd, &fullName);
+    FREE_BUFFER(fullName);
+}
+
+/* recursively back up this path, w/ exclusions */
+void backupRecursiveF(NiBackup *ni, int source, int dest, struct Buffer_char *fullName)
 {
     DIR *dh;
-    struct dirent *de, *der;
+    struct dirent *de = NULL, *der;
     struct stat sbuf, tbuf;
     int sFd, dFd;
-    int hSource, hDest;
+    int hSource = -1, hDest = -1;
+    size_t fnl = fullName->bufused;
 
     hSource = dup(source);
     if (hSource < 0) {
         perror("dup");
-        return;
+        goto done;
     }
     hDest = dup(dest);
     if (hDest < 0) {
         perror("dup");
-        return;
+        goto done;
     }
 
     /* stat the source (for st_dev)
      * FIXME: cache */
     if (fstat(source, &sbuf) != 0) {
         perror("fstat");
-        return;
+        goto done;
     }
 
     de = malloc(direntLen);
-    if (de == NULL) return;
+    if (de == NULL) goto done;
 
     /* go over source-dir files */
     if ((dh = fdopendir(hSource))) {
@@ -114,20 +130,23 @@ void backupRecursive(NiBackup *ni, int source, int dest)
             /* skip . and .. */
             if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
 
-            /* and dotfiles in the root */
-            if (ni->noRootDotfiles && source == ni->sourceFd && de->d_name[0] == '.') continue;
+            /* check exclusions */
+            fullName->bufused = fnl;
+            WRITE_BUFFER(*fullName, de->d_name, strlen(de->d_name) + 1); fullName->bufused--;
+            if (excluded(ni, fullName->buf)) continue;
 
             /* otherwise, back it up */
             dFd = backupPath(ni, de->d_name, source, dest);
 
             /* and children */
             if (dFd >= 0) {
+                WRITE_ONE_BUFFER(*fullName, '/');
                 sFd = openat(source, de->d_name, O_RDONLY);
                 if (sFd >= 0) {
                     if (fstat(sFd, &tbuf) == 0 &&
                         sbuf.st_dev == tbuf.st_dev) {
 
-                        backupRecursive(ni, sFd, dFd);
+                        backupRecursiveF(ni, sFd, dFd, fullName);
                     }
                     close(sFd);
                 }
@@ -139,6 +158,7 @@ void backupRecursive(NiBackup *ni, int source, int dest)
     } else {
         close(hSource);
     }
+    hSource = -1;
 
     /* then go over dest-dir files, in case something was deleted */
     if ((dh = fdopendir(hDest))) {
@@ -160,7 +180,11 @@ void backupRecursive(NiBackup *ni, int source, int dest)
     } else {
         close(hDest);
     }
+    hDest = -1;
 
+done:
+    if (hSource >= 0) close(hSource);
+    if (hDest >= 0) close(hDest);
     free(de);
 }
 
@@ -170,6 +194,9 @@ void backupContaining(NiBackup *ni, char *path)
     int source = -1, dest = -1,
         newSource = -1, newDest = -1;
     char *part, *nextPart, *saveptr;
+    struct Buffer_char fullName;
+
+    fullName.buf = NULL;
 
     /* first off, remove the source */
     if (strncmp(path, ni->source, ni->sourceLen)) goto done;
@@ -177,18 +204,21 @@ void backupContaining(NiBackup *ni, char *path)
     if (path[0] != '/') goto done;
     path++;
 
-    /* if it's a dotfile, ignore it */
-    if (ni->noRootDotfiles && path[0] == '.') goto done;
-
     /* now start from here and back up */
     source = dup(ni->sourceFd);
     if (source < 0) goto done;
     dest = dup(ni->destFd);
     if (dest < 0) goto done;
 
+    INIT_BUFFER(fullName);
     part = strtok_r(path, "/", &saveptr);
 
     while (dest >= 0 && (nextPart = strtok_r(NULL, "/", &saveptr))) {
+        /* check this name */
+        WRITE_BUFFER(fullName, part, strlen(part) + 1); fullName.bufused--;
+        if (excluded(ni, fullName.buf))
+            goto done;
+
         /* back it up */
         newDest = backupPath(ni, part, source, dest);
         close(dest);
@@ -205,18 +235,26 @@ void backupContaining(NiBackup *ni, char *path)
             source = newSource;
         }
 
+        WRITE_ONE_BUFFER(fullName, '/');
         part = nextPart;
     }
 
     /* and back up the final component in a thread */
     if (part && dest >= 0) {
+        WRITE_BUFFER(fullName, part, strlen(part) + 1);
+        if (excluded(ni, fullName.buf))
+            goto done;
+
         backupPathInThread(ni, part, source, dest);
-        return; /* backupPathInThread will close */
+
+        /* backupPathInThread will close */
+        source = dest = -1;
     }
 
 done:
     if (source >= 0) close(source);
     if (dest >= 0) close(dest);
+    if (fullName.buf) FREE_BUFFER(fullName);
 }
 
 static const char pseudos[] = "cmd"; /* content, metadata, directory */
@@ -452,6 +490,8 @@ static void *backupPathTh(void *bpavp)
     close(bpa->destDir);
 
     free(bpa);
+
+    return NULL;
 }
 
 /* call backupPath in an available thread, or block 'til one is available */
