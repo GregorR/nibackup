@@ -588,7 +588,7 @@ static int xdelta3e(const char *from, const char *to, const char *patch)
 
     if (pid == 0) {
         /* child, call xdelta */
-        execlp("xdelta3", "xdelta3", "-e", "-f", "-s", from, to, patch, NULL);
+        execlp("xdelta3", "xdelta3", "-e", "-f", "-S", "djw", "-s", from, to, patch, NULL);
         perror("xdelta3");
         exit(1);
         abort();
