@@ -52,7 +52,7 @@ files in the destination, each starting with "ni":
 * nim: The metadata directory. For each increment, represents the file
        metadata.
 * nic: The file content for regular files, or link target for symlinks, for
-       each increment. The newest increment is stored plain, named ?.new. Older
-       increments are either stored as bsdiff patches (.bsp) or, if that fails,
-       complete (.old).
+       each increment. The newest increment is stored plain. Older increments
+       are either stored as bsdiff patches (.bsp) or, if that fails, complete
+       (.dat).
 * nid: The directory content, for directories.

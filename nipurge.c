@@ -193,7 +193,7 @@ void purge(long long oldest, int dirfd, char *name)
     for (oldIncr = curIncr - 1; oldIncr > 0; oldIncr--) {
         struct stat sbuf;
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.old", oldIncr);
+        sprintf(pseudoD, "/%llu.met", oldIncr);
         if (fstatat(dirfd, pseudo, &sbuf, 0) == 0) {
             if (sbuf.st_mtime < oldest) {
                 /* this is old enough to purge */
@@ -206,7 +206,7 @@ void purge(long long oldest, int dirfd, char *name)
     for (ii = oldIncr + 1; ii <= curIncr; ii++) {
         BackupMetadata meta;
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
+        sprintf(pseudoD, "/%llu.met", ii);
         if (readMetadata(&meta, dirfd, pseudo) == 0) {
             if (meta.type == MD_TYPE_NONEXIST) oldIncr = ii;
             else break;
@@ -225,12 +225,12 @@ void purge(long long oldest, int dirfd, char *name)
     for (ii = oldIncr; ii > 0; ii--) {
         /* metadata */
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
+        sprintf(pseudoD, "/%llu.met", ii);
         unlinkat(dirfd, pseudo, 0);
 
         /* and content */
         pseudo[2] = 'c';
-        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
+        sprintf(pseudoD, "/%llu.dat", ii);
         unlinkat(dirfd, pseudo, 0);
         sprintf(pseudoD, "/%llu.bsp", ii);
         unlinkat(dirfd, pseudo, 0);

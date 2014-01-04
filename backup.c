@@ -288,7 +288,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* read in the old metadata */
     pseudo[2] = 'm';
-    sprintf(pseudoD, "/%llu.new", lastIncr);
+    sprintf(pseudoD, "/%llu.met", lastIncr);
     if (readMetadata(&lastMeta, destDir, pseudo) != 0) {
         PERRLN(name);
         goto done;
@@ -307,7 +307,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* write out the new metadata */
     pseudo[2] = 'm';
-    sprintf(pseudoD, "/%llu.new", curIncr);
+    sprintf(pseudoD, "/%llu.met", curIncr);
     if (writeMetadata(&meta, destDir, pseudo) != 0) {
         PERRLN(name);
         goto done;
@@ -315,7 +315,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* and the new data */
     pseudo[2] = 'c';
-    sprintf(pseudoD, "/%llu.new", curIncr);
+    sprintf(pseudoD, "/%llu.dat", curIncr);
     if (meta.type == MD_TYPE_LINK) {
         /* just get the link target */
         char *linkTarget = malloc(meta.size);
@@ -377,8 +377,8 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     /* rename the old metadata */
     pseudo[2] = 'm';
     pseudo2[2] = 'm';
-    sprintf(pseudoD, "/%llu.new", lastIncr);
-    sprintf(pseudo2D, "/%llu.old", lastIncr);
+    sprintf(pseudoD, "/%llu.met", lastIncr);
+    sprintf(pseudo2D, "/%llu.met", lastIncr);
     renameat(destDir, pseudo, destDir, pseudo2);
 
     /* create the content patchfile */
@@ -390,14 +390,14 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
         /* the current increment */
         pseudo[2] = 'c';
-        sprintf(pseudoD, "/%llu.new", curIncr);
+        sprintf(pseudoD, "/%llu.dat", curIncr);
         curIncrFd = openat(destDir, pseudo, O_RDONLY);
 
         if (curIncrFd >= 0) {
             sprintf(curIncrBuf, "/proc/self/fd/%d", curIncrFd);
 
             /* the last increment */
-            sprintf(pseudoD, "/%llu.new", lastIncr);
+            sprintf(pseudoD, "/%llu.dat", lastIncr);
             lastIncrFd = openat(destDir, pseudo, O_RDONLY);
 
             if (lastIncrFd >= 0) {
@@ -412,10 +412,8 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
                     if (bsdiff(curIncrBuf, lastIncrBuf, patchBuf) == 0) {
                         /* remove the original */
-                        sprintf(pseudoD, "/%llu.new", lastIncr);
+                        sprintf(pseudoD, "/%llu.dat", lastIncr);
                         unlinkat(destDir, pseudo, 0);
-                    } else {
-                        wroteData = 0; /* FIXME, bad name */
                     }
 
                     close(patchFd);
@@ -424,15 +422,6 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
             }
             close(curIncrFd);
         }
-    }
-
-    if (!wroteData) {
-        /* if we failed to patch, just rename */
-        pseudo[2] = 'c';
-        sprintf(pseudoD, "/%llu.new", lastIncr);
-        pseudo2[2] = 'c';
-        sprintf(pseudo2D, "/%llu.old", lastIncr);
-        renameat(destDir, pseudo, destDir, pseudo2);
     }
 
 done:

@@ -260,7 +260,7 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
     for (oldIncr = curIncr; oldIncr > 0; oldIncr--) {
         struct stat sbuf;
         pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.%s", oldIncr, (oldIncr == curIncr) ? "new" : "old");
+        sprintf(pseudoD, "/%llu.met", oldIncr);
         if (fstatat(sourceDir, pseudo, &sbuf, 0) == 0) {
             if (sbuf.st_mtime <= newest)
                 break;
@@ -357,7 +357,7 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
 {
     char *pseudo, *pseudoD;
     unsigned long long ii;
-    int tmpi, ret = -1;
+    int tmpi, ifd = -1, ret = -1;
 
     SF(pseudo, malloc, NULL, "malloc", (strlen(name) + (4*sizeof(unsigned long long)) + 9));
     pseudoD = pseudo + strlen(name) + 3;
@@ -365,7 +365,7 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
 
     /* find fully-defined content */
     for (ii = restIncr; ii <= curIncr; ii++) {
-        sprintf(pseudoD, "/%llu.%s", ii, (ii == curIncr) ? "new" : "old");
+        sprintf(pseudoD, "/%llu.dat", ii);
         tmpi = faccessat(sourceDir, pseudo, R_OK, 0);
         if (tmpi == 0) break;
     }
@@ -377,10 +377,17 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
     }
 
     /* copy in this version */
-    if (copySparse(sourceDir, pseudo, targetDir, name) != 0) {
+    ifd = openat(sourceDir, name, O_RDONLY);
+    if (ifd < 0) {
         perror(name);
         goto done;
     }
+    if (copySparse(ifd, targetDir, name) != 0) {
+        perror(name);
+        goto done;
+    }
+    close(ifd);
+    ifd = -1;
 
     /* then start patching */
     ret = 0;
@@ -429,6 +436,7 @@ static int restoreData(int sourceDir, int targetDir, char *name, unsigned long l
     }
 
 done:
+    if (ifd >= 0) close(ifd);
     free(pseudo);
     return ret;
 }
