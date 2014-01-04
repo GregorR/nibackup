@@ -169,13 +169,13 @@ int cmpMetadata(BackupMetadata *l, BackupMetadata *r)
 }
 
 /* utility function to copy a file sparsely */
-int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname)
+int copySparse(int ifd, int ddirfd, const char *dname)
 {
     char *buf = NULL;
     size_t bufsz = 4096;
     ssize_t rd;
     off_t dataStart, dataEnd = 0, toRd;
-    int ifd = -1, ofd = -1, ret = -1;
+    int ofd = -1, ret = -1;
 
     buf = malloc(bufsz);
     if (buf == NULL) {
@@ -183,14 +183,9 @@ int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname)
         goto done;
     }
 
-    ifd = openat(sdirfd, sname, O_RDONLY);
-    if (ifd < 0) {
-        perror(sname);
-        goto done;
-    }
     ofd = openat(ddirfd, dname, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (ofd < 0) {
-        perror(sname);
+        perror(dname);
         goto done;
     }
 
@@ -234,7 +229,6 @@ int copySparse(int sdirfd, const char *sname, int ddirfd, const char *dname)
 
 done:
     free(buf);
-    if (ifd >= 0) close(ifd);
     if (ofd >= 0) close(ofd);
     return ret;
 }

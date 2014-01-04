@@ -354,7 +354,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     } else if (meta.type == MD_TYPE_FILE) {
         /* a regular file, this we can copy */
-        if (copySparse(source, name, destDir, pseudo) != 0) {
+        if (copySparse(ffd, destDir, pseudo) != 0) {
             PERRLN(name);
             goto done;
         }
