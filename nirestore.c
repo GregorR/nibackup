@@ -170,6 +170,8 @@ static void usage()
                     "Options\n"
                     "  -a|--age <time>:\n"
                     "      Restore files as they existed <time> seconds ago.\n"
+                    "  -t|--time <time>:\n"
+                    "      Restore files as they existed at time <time>. Incompatible with -a.\n"
                     "  -i|--selection <path>:\n"
                     "      Restore only <path>.\n");
 }

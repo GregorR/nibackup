@@ -57,7 +57,8 @@ static void purge(long long maxAge, int dirfd, char *name);
 int main(int argc, char **argv)
 {
     const char *backupDir = NULL;
-    long long maxAge = -1, oldest;
+    long long maxAge, oldest;
+    int setAge = 0, setTime = 0;
     int fd, argi;
     long name_max;
 
@@ -67,6 +68,24 @@ int main(int argc, char **argv)
         if (arg[0] == '-') {
             ARG(n, dry-run) {
                 dryRun = 1;
+
+            } else ARGN(a, age) {
+                arg = argv[++argi];
+                maxAge = atoll(arg);
+                setAge = 1;
+                if (maxAge <= 0 && strcmp(arg, "0")) {
+                    fprintf(stderr, "Invalid age\n");
+                    return 1;
+                }
+
+            } else ARGN(t, time) {
+                arg = argv[++argi];
+                oldest = atoll(arg);
+                setTime = 1;
+                if (oldest == 0 && strcmp(arg, "0")) {
+                    fprintf(stderr, "Invalid purge time\n");
+                    return 1;
+                }
 
             } else {
                 usage();
@@ -78,24 +97,22 @@ int main(int argc, char **argv)
             if (!backupDir) {
                 backupDir = arg;
 
-            } else if (maxAge < 0) {
-                maxAge = atoll(arg);
-                if (maxAge <= 0 && strcmp(arg, "0")) {
-                    fprintf(stderr, "Invalid age\n");
-                    return 1;
-                }
+            } else {
+                usage();
+                return 1;
 
             }
 
         }
     }
 
-    if (!backupDir || maxAge < 0) {
+    if (!backupDir || setAge == setTime) {
         usage();
         return 1;
     }
 
-    oldest = time(NULL) - maxAge;
+    if (setAge)
+        oldest = time(NULL) - maxAge;
 
     /* open the backup directory... */
     SF(fd, open, -1, backupDir, (backupDir, O_RDONLY));
@@ -115,8 +132,12 @@ int main(int argc, char **argv)
 /* usage statement */
 void usage()
 {
-    fprintf(stderr, "Use: nibackup-purge [options] <backup> <maximum age>\n"
+    fprintf(stderr, "Use: nibackup-purge [options] <-a age|-t time> <backup>\n"
                     "Options:\n"
+                    "  -a|--age <time>:\n"
+                    "      Purge overridden data older than <time> seconds.\n"
+                    "  -t|--time <time>:\n"
+                    "      Purge overridden data changed before time <time>.\n"
                     "  -n|--dry-run:\n"
                     "      Just say what would be purged, don't purge.\n");
 }
