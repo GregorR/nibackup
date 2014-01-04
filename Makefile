@@ -22,4 +22,9 @@ nibackup-restore: $(NIRESTORE_OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(NIBACKUP_OBJS) $(NIPURGE_OBJS) $(NIRESTORE_OBJS) nibackup nibackup-purge nibackup-restore
+	rm -f $(NIBACKUP_OBJS) $(NIPURGE_OBJS) $(NIRESTORE_OBJS) deps nibackup nibackup-purge nibackup-restore
+
+deps:
+	-$(CC) -MM *.c > deps
+
+include deps
