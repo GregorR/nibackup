@@ -467,8 +467,17 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
                     if ((useBsdiff ? bsdiff : xdelta3e)
                         (curIncrBuf, lastIncrBuf, patchBuf) == 0) {
-                        /* remove the original */
-                        sprintf(pseudoD, "/%llu.dat", lastIncr);
+                        struct stat datStat, patStat;
+
+                        /* if the patch is smaller than the original, remove the original */
+                        if (fstat(lastIncrFd, &datStat) ||
+                            fstat(patchFd, &patStat) ||
+                            patStat.st_size < datStat.st_size) {
+                            /* got smaller */
+                            sprintf(pseudoD, "/%llu.dat", lastIncr);
+                        }
+
+                        /* remove the patch or original */
                         unlinkat(destDir, pseudo, 0);
                     }
 
