@@ -234,17 +234,20 @@ int main(int argc, char **argv)
     /* then continuous backup */
     fprintf(stderr, "Entering continuous mode.\n");
     while (sem_wait(&ni.qsem) == 0) {
-        NotifyQueue *ev;
+        NotifyQueue *ev, *evn;
 
         /* wait for 10 seconds of messages */
         sleep(ni.waitAfterNotif);
         fprintf(stderr, "Incremental backup.\n");
-        do {
-            pthread_mutex_lock(&ni.qlock);
-            ev = ni.notifs;
-            ni.notifs = ev->next;
-            pthread_mutex_unlock(&ni.qlock);
 
+        /* pull off current messages */
+        pthread_mutex_lock(&ni.qlock);
+        ev = ni.notifs;
+        ni.notifs = ni.lastNotif = NULL;
+        pthread_mutex_unlock(&ni.qlock);
+
+        /* then back them up */
+        while (ev) {
             if (ev->file) {
                 if (verbose) fprintf(stderr, "%s\n", ev->file);
                 backupContaining(&ni, ev->file);
@@ -257,8 +260,10 @@ int main(int argc, char **argv)
                 }
             }
 
+            evn = ev->next;
             free(ev);
-        } while (sem_trywait(&ni.qsem) == 0);
+            ev = evn;
+        }
     }
 
     pthread_join(notifTh, NULL);
