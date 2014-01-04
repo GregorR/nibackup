@@ -55,10 +55,11 @@ int main(int argc, char **argv)
               cycleTh,
               fullTh;
     struct stat sbuf;
-    int i, tmpi, argi, verbose = 0;
+    int i, tmpi, argi;
 
     ni.source = NULL;
     ni.dest = NULL;
+    ni.verbose = 0;
     ni.waitAfterNotif = 10;
     ni.fullSyncCycle = 21600;
     ni.noRootDotfiles = 0;
@@ -86,7 +87,7 @@ int main(int argc, char **argv)
                 if (ni.threads <= 0) ni.threads = 1;
 
             } else ARG(v, verbose) {
-                verbose = 1;
+                ni.verbose = 1;
 
             } else ARGN(@, notification-fd) {
                 arg = argv[++argi];
@@ -238,7 +239,7 @@ int main(int argc, char **argv)
 
         /* wait for 10 seconds of messages */
         sleep(ni.waitAfterNotif);
-        fprintf(stderr, "Incremental backup.\n");
+        if (ni.verbose) fprintf(stderr, "Incremental backup.\n");
 
         /* pull off current messages */
         pthread_mutex_lock(&ni.qlock);
@@ -249,13 +250,12 @@ int main(int argc, char **argv)
         /* then back them up */
         while (ev) {
             if (ev->file) {
-                if (verbose) fprintf(stderr, "%s\n", ev->file);
+                if (ni.verbose) fprintf(stderr, "%s\n", ev->file);
                 backupContaining(&ni, ev->file);
                 free(ev->file);
             } else {
-                fprintf(stderr, "Periodic full sync.\n");
                 if (pthread_tryjoin_np(fullTh, NULL) == 0) {
-                    fprintf(stderr, "Starting full sync\n");
+                    if (ni.verbose) fprintf(stderr, "Starting full sync.\n");
                     pthread_create(&fullTh, NULL, fullBackup, &ni);
                 }
             }
@@ -264,6 +264,8 @@ int main(int argc, char **argv)
             free(ev);
             ev = evn;
         }
+
+        if (ni.verbose) fprintf(stderr, "Finished incremental backup.\n");
     }
 
     pthread_join(notifTh, NULL);
@@ -393,6 +395,7 @@ static void *fullBackup(void *nivp)
 {
     NiBackup *ni = (NiBackup *) nivp;
     backupRecursive(ni, ni->sourceFd, ni->destFd);
+    if (ni->verbose) fprintf(stderr, "Finished full sync.\n");
 }
 
 /* method to trigger a full update occasionally */

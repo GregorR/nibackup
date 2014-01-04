@@ -32,6 +32,7 @@ struct NiBackup_ {
     int destFd;
 
     /* configuration */
+    int verbose;
     int waitAfterNotif;
     int fullSyncCycle;
     int noRootDotfiles;
