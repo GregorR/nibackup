@@ -34,6 +34,11 @@
 #include "metadata.h"
 #include "nibackup.h"
 
+#define PERRLN(str) do { \
+    fprintf(stderr, "%s:%d: ", __FILE__, __LINE__); \
+    perror(str); \
+} while(0)
+
 /* arguments to the backupPath function */
 struct BackupPathArgs_ {
     NiBackup *ni;
@@ -183,7 +188,7 @@ void backupContaining(NiBackup *ni, char *path)
 
     part = strtok_r(path, "/", &saveptr);
 
-    while ((nextPart = strtok_r(NULL, "/", &saveptr))) {
+    while (dest >= 0 && (nextPart = strtok_r(NULL, "/", &saveptr))) {
         /* back it up */
         newDest = backupPath(ni, part, source, dest);
         close(dest);
@@ -204,7 +209,7 @@ void backupContaining(NiBackup *ni, char *path)
     }
 
     /* and back up the final component in a thread */
-    if (part) {
+    if (part && dest >= 0) {
         backupPathInThread(ni, part, source, dest);
         return; /* backupPathInThread will close */
     }
@@ -243,7 +248,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     pseudo[2] = 'i';
     ifd = openat(destDir, pseudo, O_RDWR | O_CREAT, 0600);
     if (ifd < 0) {
-        perror(pseudo);
+        PERRLN(pseudo);
         goto done;
     }
     if (flock(ifd, LOCK_EX) != 0) {
@@ -256,7 +261,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
         pseudo[2] = pseudos[i];
         if (mkdirat(destDir, pseudo, 0700) < 0) {
             if (errno != EEXIST) {
-                perror(pseudo);
+                PERRLN(pseudo);
                 goto done;
             }
         }
@@ -277,7 +282,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
     /* open the file and get its metadata */
     if (openMetadata(&meta, &ffd, source, name) != 0) {
-        perror(name);
+        PERRLN(name);
         goto done;
     }
 
@@ -285,7 +290,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.new", lastIncr);
     if (readMetadata(&lastMeta, destDir, pseudo) != 0) {
-        perror(name);
+        PERRLN(name);
         goto done;
     }
 
@@ -304,7 +309,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.new", curIncr);
     if (writeMetadata(&meta, destDir, pseudo) != 0) {
-        perror(name);
+        PERRLN(name);
         goto done;
     }
 
@@ -323,7 +328,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 
         rllen = readlinkat(source, name, linkTarget, meta.size);
         if (rllen <= 0) {
-            perror(name);
+            PERRLN(name);
             free(linkTarget);
             goto done;
         }
@@ -331,13 +336,13 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
         /* and write it out */
         ofd = openat(destDir, pseudo, O_WRONLY | O_CREAT | O_TRUNC, 0600);
         if (ofd < 0) {
-            perror(name);
+            PERRLN(name);
             free(linkTarget);
             goto done;
         }
 
         if (write(ofd, linkTarget, rllen) != rllen) {
-            perror(name);
+            PERRLN(name);
             close(ofd);
             free(linkTarget);
             goto done;
@@ -350,7 +355,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     } else if (meta.type == MD_TYPE_FILE) {
         /* a regular file, this we can copy */
         if (copySparse(source, name, destDir, pseudo) != 0) {
-            perror(name);
+            PERRLN(name);
             goto done;
         }
         wroteData = 1;
@@ -467,6 +472,8 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
     BackupPathArgs *bpa = malloc(sizeof(BackupPathArgs));
     if (!bpa) {
         /* FIXME */
+        close(source);
+        close(destDir);
         return;
     }
 
