@@ -66,7 +66,7 @@ static void lsSelected(NiLsOpt *opt, int sourceDir, char *selection);
 static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName);
 
 /* list a single file or directory */
-static int ls(NiLsOpt *opt, int sourceDir, char *name);
+static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName);
 
 /* print this metadata */
 static void lsMeta(BackupMetadata *meta);
@@ -202,6 +202,10 @@ static void lsSelected(NiLsOpt *opt, int sourceDir, char *selection)
 {
     char *part, *nextPart, *saveptr;
     int newSourceDir;
+    struct Buffer_char fullName;
+
+    INIT_BUFFER(fullName);
+    WRITE_BUFFER(fullName, selection, strlen(selection));
 
     part = strtok_r(selection, "/", &saveptr);
     while ((nextPart = strtok_r(NULL, "/", &saveptr))) {
@@ -220,15 +224,12 @@ static void lsSelected(NiLsOpt *opt, int sourceDir, char *selection)
     }
 
     /* now "part" is the last part, so list that */
-    if (ls(opt, sourceDir, part) && !opt->dir) {
+    if (ls(opt, sourceDir, part, strlen(part)) && !opt->dir) {
         char *dir;
-        struct Buffer_char fullName;
-
-        INIT_BUFFER(fullName);
-        WRITE_BUFFER(fullName, selection, strlen(selection));
 
         /* list the content as well */
-        printf("\n%s:\n", selection);
+        WRITE_ONE_BUFFER(fullName, 0); fullName.bufused--;
+        printf("\n\n%s:\n", fullName.buf);
         SF(dir, malloc, NULL, (strlen(part) + 4));
         sprintf(dir, "nid%s", part);
         SFE(newSourceDir, openat, -1, part, (sourceDir, dir, O_RDONLY));
@@ -237,9 +238,9 @@ static void lsSelected(NiLsOpt *opt, int sourceDir, char *selection)
         sourceDir = newSourceDir;
 
         lsDir(opt, sourceDir, &fullName);
-
-        FREE_BUFFER(fullName);
     }
+
+    FREE_BUFFER(fullName);
 }
 
 /* list a directory's content */
@@ -248,7 +249,7 @@ static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName)
     int hdirfd;
     DIR *dh;
     struct dirent *de, *der;
-    size_t fnl, fnls, i;
+    size_t fnl, fnls, i, longestName;
 
     struct Buffer_charp names, dirs;
 
@@ -262,13 +263,19 @@ static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName)
 
     /* first just get out the list of files */
     INIT_BUFFER(names);
+    longestName = 0;
     while (1) {
         char *dname;
+        size_t nameLen;
+
         if (readdir_r(dh, de, &der) != 0) break;
         if (der == NULL) break;
         if (strncmp(de->d_name, "nii", 3)) continue;
         SF(dname, strdup, NULL, (de->d_name + 3));
         WRITE_ONE_BUFFER(names, dname);
+
+        nameLen = strlen(dname);
+        if (nameLen > longestName) longestName = nameLen;
     }
 
     closedir(dh);
@@ -279,7 +286,7 @@ static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName)
     /* list them */
     if (opt->recursive) INIT_BUFFER(dirs);
     for (i = 0; i < names.bufused; i++) {
-        if (ls(opt, sourceDir, names.buf[i]) && opt->recursive) {
+        if (ls(opt, sourceDir, names.buf[i], longestName) && opt->recursive) {
             WRITE_ONE_BUFFER(dirs, names.buf[i]);
         } else {
             free(names.buf[i]);
@@ -298,7 +305,7 @@ static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName)
             WRITE_BUFFER(*fullName, dirs.buf[i], strlen(dirs.buf[i])+1);
             fullName->bufused--;
 
-            printf("\n%s:\n", fullName->buf);
+            printf("\n\n%s:\n", fullName->buf);
 
             /* then list it */
             SF(dir, malloc, NULL, (strlen(dirs.buf[i]) + 4));
@@ -319,13 +326,14 @@ static void lsDir(NiLsOpt *opt, int sourceDir, struct Buffer_char *fullName)
 }
 
 /* List a single file or directory. Returns 1 for directories. */
-static int ls(NiLsOpt *opt, int sourceDir, char *name)
+static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
 {
     char *pseudo, *pseudoD;
     int ifd, tmpi;
     char incrBuf[4*sizeof(unsigned long long)+1];
     unsigned long long curIncr, oldIncr;
     BackupMetadata meta;
+    struct stat sbuf;
 
     meta.type = MD_TYPE_NONEXIST;
 
@@ -346,7 +354,6 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name)
     /* now find the acceptable increment */
     pseudo[2] = 'm';
     for (oldIncr = curIncr; oldIncr > 0; oldIncr--) {
-        struct stat sbuf;
         sprintf(pseudoD, "/%llu.met", oldIncr);
         if (fstatat(sourceDir, pseudo, &sbuf, 0) == 0) {
             if (sbuf.st_mtime <= opt->newest)
@@ -360,31 +367,34 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name)
     /* load in the metadata */
     SFE(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo));
 
+    /* skip it if it doesn't exist */
+    if (meta.type == MD_TYPE_NONEXIST && !opt->history) goto done;
+
     /* list out the metadata, possibly in long format */
-    printf("%-32s", name);
-    if (opt->llong) {
-        printf(" %5llu ", oldIncr);
+    printf("%-*s", longestName, name);
+    if (opt->history)
+        printf(" %11llu %5llu ", (unsigned long long) sbuf.st_mtime, oldIncr);
+    if (opt->llong)
         lsMeta(&meta);
-    }
     putchar('\n');
 
     if (opt->history) {
         /* list full history as well */
         unsigned long long ii;
         for (ii = curIncr; ii > 0; ii--) {
-            struct stat sbuf;
-
             if (ii == oldIncr) continue;
 
             sprintf(pseudoD, "/%llu.met", ii);
 
             if (fstatat(sourceDir, pseudo, &sbuf, 0) == 0 &&
                 readMetadata(&meta, sourceDir, pseudo) == 0) {
-                printf("%32llu %5llu ", (unsigned long long) sbuf.st_mtime, ii);
-                lsMeta(&meta);
+                printf("%*llu %5llu ", longestName + 12, (unsigned long long) sbuf.st_mtime, ii);
+                if (opt->llong)
+                    lsMeta(&meta);
                 putchar('\n');
             }
         }
+        putchar('\n');
     }
 
 done:
