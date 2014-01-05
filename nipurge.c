@@ -49,10 +49,10 @@ static int dryRun = 0;
 static void usage(void);
 
 /* purge this directory */
-static void purgeDir(long long maxAge, int dirfd);
+static void purgeDir(long long maxAge, int inDeadDir, int dirfd);
 
 /* purge this backup */
-static void purge(long long maxAge, int dirfd, char *name);
+static void purge(long long maxAge, int inDeadDir, int dirfd, char *name);
 
 int main(int argc, char **argv)
 {
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     direntLen = sizeof(struct dirent) + name_max + 1;
 
     /* and begin the purge */
-    purgeDir(oldest, fd);
+    purgeDir(oldest, 0, fd);
 
     return 0;
 }
@@ -143,33 +143,16 @@ void usage()
 }
 
 /* purge this directory */
-void purgeDir(long long oldest, int dirfd)
+void purgeDir(long long oldest, int inDeadDir, int dirfd)
 {
     int hdirfd;
     DIR *dh;
     struct dirent *de, *der;
-    int sfd;
 
     SF(de, malloc, NULL, "malloc", (direntLen));
     SF(hdirfd, dup, -1, "dup", (dirfd));
     SF(dh, fdopendir, NULL, "fdopendir", (hdirfd));
 
-    /* first purge subdirectories */
-    while (1) {
-        if (readdir_r(dh, de, &der) != 0) break;
-        if (der == NULL) break;
-
-        /* looking for directories */
-        if (strncmp(de->d_name, "nid", 3)) continue;
-
-        /* recurse */
-        SF(sfd, openat, -1, de->d_name, (dirfd, de->d_name, O_RDONLY));
-        purgeDir(oldest, sfd);
-        close(sfd);
-    }
-    rewinddir(dh);
-
-    /* then purge content */
     while (1) {
         if (readdir_r(dh, de, &der) != 0) break;
         if (der == NULL) break;
@@ -178,7 +161,7 @@ void purgeDir(long long oldest, int dirfd)
         if (strncmp(de->d_name, "nii", 3)) continue;
 
         /* purge this */
-        purge(oldest, dirfd, de->d_name + 3);
+        purge(oldest, inDeadDir, dirfd, de->d_name + 3);
     }
 
     closedir(dh);
@@ -189,12 +172,13 @@ void purgeDir(long long oldest, int dirfd)
 static const char pseudos[] = "cmd";
 
 /* purge this backup */
-void purge(long long oldest, int dirfd, char *name)
+void purge(long long oldest, int inDeadDir, int dirfd, char *name)
 {
     char *pseudo, *pseudoD;
-    int i, ifd, tmpi;
+    int i, ifd, dfd, tmpi;
     char incrBuf[4*sizeof(unsigned long long)+1];
     unsigned long long curIncr, oldIncr, ii;
+    BackupMetadata curMeta;
 
     /* make room for our pseudos: ni?<name>/<ull>.{old,new} */
     SF(pseudo, malloc, NULL, "malloc", (strlen(name) + (4*sizeof(unsigned long long)) + 9));
@@ -210,10 +194,14 @@ void purge(long long oldest, int dirfd, char *name)
     curIncr = atoll(incrBuf);
     if (curIncr == 0) goto done;
 
+    /* and the current metadata */
+    pseudo[2] = 'm';
+    sprintf(pseudoD, "/%llu.met", curIncr);
+    if (readMetadata(&curMeta, dirfd,  pseudo) != 0) goto done;
+
     /* now find the first dead increment */
-    for (oldIncr = curIncr - 1; oldIncr > 0; oldIncr--) {
+    for (oldIncr = curIncr - (inDeadDir ? 0 : 1); oldIncr > 0; oldIncr--) {
         struct stat sbuf;
-        pseudo[2] = 'm';
         sprintf(pseudoD, "/%llu.met", oldIncr);
         if (fstatat(dirfd, pseudo, &sbuf, 0) == 0) {
             if (sbuf.st_mtime < oldest) {
@@ -240,35 +228,46 @@ void purge(long long oldest, int dirfd, char *name)
     if (dryRun) {
         fprintf(stderr, "Purge %s <= %llu%s\n", name, oldIncr, (oldIncr == curIncr) ? " (all)" : "");
         goto done;
+
+    } else {
+        /* delete all the old increments */
+        for (ii = oldIncr; ii > 0; ii--) {
+            /* metadata */
+            pseudo[2] = 'm';
+            sprintf(pseudoD, "/%llu.met", ii);
+            unlinkat(dirfd, pseudo, 0);
+
+            /* and content */
+            pseudo[2] = 'c';
+            sprintf(pseudoD, "/%llu.dat", ii);
+            unlinkat(dirfd, pseudo, 0);
+            sprintf(pseudoD, "/%llu.bsp", ii);
+            unlinkat(dirfd, pseudo, 0);
+            sprintf(pseudoD, "/%llu.x3p", ii);
+            unlinkat(dirfd, pseudo, 0);
+        }
     }
 
-    /* delete all the old increments */
-    for (ii = oldIncr; ii > 0; ii--) {
-        /* metadata */
-        pseudo[2] = 'm';
-        sprintf(pseudoD, "/%llu.met", ii);
-        unlinkat(dirfd, pseudo, 0);
-
-        /* and content */
-        pseudo[2] = 'c';
-        sprintf(pseudoD, "/%llu.dat", ii);
-        unlinkat(dirfd, pseudo, 0);
-        sprintf(pseudoD, "/%llu.bsp", ii);
-        unlinkat(dirfd, pseudo, 0);
-        sprintf(pseudoD, "/%llu.x3p", ii);
-        unlinkat(dirfd, pseudo, 0);
+    /* recurse to subdirectories */
+    pseudo[2] = 'd';
+    *pseudoD = 0;
+    dfd = openat(dirfd, pseudo, O_RDONLY);
+    if (dfd >= 0) {
+        purgeDir(oldest, inDeadDir || (curMeta.type != MD_TYPE_DIRECTORY), dfd);
+        close(dfd);
     }
 
     /* now we may have gotten rid of the file entirely */
-    *pseudoD = 0;
-    for (i = 0; pseudos[i]; i++) {
-        pseudo[2] = pseudos[i];
-        if (unlinkat(dirfd, pseudo, AT_REMOVEDIR) != 0) break;
-    }
-    if (!pseudos[i]) {
-        /* completely removed this file, so remove the increment file as well */
-        pseudo[2] = 'i';
-        unlinkat(dirfd, pseudo, 0);
+    if (!dryRun) {
+        for (i = 0; pseudos[i]; i++) {
+            pseudo[2] = pseudos[i];
+            if (unlinkat(dirfd, pseudo, AT_REMOVEDIR) != 0) break;
+        }
+        if (!pseudos[i]) {
+            /* completely removed this file, so remove the increment file as well */
+            pseudo[2] = 'i';
+            unlinkat(dirfd, pseudo, 0);
+        }
     }
 
 done:
