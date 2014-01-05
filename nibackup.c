@@ -338,8 +338,8 @@ static void usage()
                     "      Use <threads> threads for backup.\n"
                     "  --max-bsdiff <bytes>:\n"
                     "      Use xdelta for all files large than <bytes> bytes.\n"
-                    "  -v|--verbose:\n"
-                    "      Be more verbose.\n");
+                    "  -v|--verbose <level>:\n"
+                    "      Set verbosity level to <level>.\n");
 }
 
 static void reduceToSysAdmin()
