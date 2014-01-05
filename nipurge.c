@@ -44,6 +44,7 @@ static size_t direntLen;
 
 /* FIXME: this should not be a global */
 static int dryRun = 0;
+static int verbose = 0;
 
 /* usage statement */
 static void usage(void);
@@ -66,10 +67,7 @@ int main(int argc, char **argv)
     ARG_NEXT();
     while (argType) {
         if (argType != ARG_VAL) {
-            ARG(n, dry-run) {
-                dryRun = 1;
-
-            } else ARGN(a, age) {
+            ARGN(a, age) {
                 ARG_GET();
                 maxAge = atoll(arg);
                 setAge = 1;
@@ -86,6 +84,13 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid purge time\n");
                     return 1;
                 }
+
+            } else ARG(n, dry-run) {
+                dryRun = 1;
+
+            } else ARGN(v, verbose) {
+                ARG_GET();
+                verbose = atoi(arg);
 
             } else {
                 usage();
@@ -141,7 +146,9 @@ void usage()
                     "  -t|--time <time>:\n"
                     "      Purge overridden data changed before time <time>.\n"
                     "  -n|--dry-run:\n"
-                    "      Just say what would be purged, don't purge.\n");
+                    "      Just say what would be purged, don't purge.\n"
+                    "  -v|--verbose <verbosity>:\n"
+                    "      Be more verbose.\n");
 }
 
 /* purge this directory */
@@ -227,11 +234,11 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
     if (oldIncr == 0) goto done;
 
     /* maybe just say what we would have done */
-    if (dryRun) {
+    if (dryRun || verbose) {
         fprintf(stderr, "Purge %s <= %llu%s\n", name, oldIncr, (oldIncr == curIncr) ? " (all)" : "");
-        goto done;
+    }
 
-    } else {
+    if (!dryRun) {
         /* delete all the old increments */
         for (ii = oldIncr; ii > 0; ii--) {
             /* metadata */
