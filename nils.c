@@ -371,7 +371,7 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
     if (meta.type == MD_TYPE_NONEXIST && !opt->history) goto done;
 
     /* list out the metadata, possibly in long format */
-    printf("%-*s", longestName, name);
+    printf("%-*s", (int) longestName, name);
     if (opt->history)
         printf(" %11llu %5llu ", (unsigned long long) sbuf.st_mtime, oldIncr);
     if (opt->llong)
@@ -388,7 +388,7 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
 
             if (fstatat(sourceDir, pseudo, &sbuf, 0) == 0 &&
                 readMetadata(&meta, sourceDir, pseudo) == 0) {
-                printf("%*llu %5llu ", longestName + 12, (unsigned long long) sbuf.st_mtime, ii);
+                printf("%*llu %5llu ", (int) longestName + 12, (unsigned long long) sbuf.st_mtime, ii);
                 if (opt->llong)
                     lsMeta(&meta);
                 putchar('\n');
