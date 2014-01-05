@@ -263,7 +263,7 @@ done:
     if (fullName.buf) FREE_BUFFER(fullName);
 }
 
-static const char pseudos[] = "cmd"; /* content, metadata, directory */
+static const char pseudos[] = "cm"; /* content, metadata */
 
 /* back up this path, returning an open fd to the backup directory if
  * applicable */
@@ -407,9 +407,17 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
         wroteData = 1;
 
     } else if (meta.type == MD_TYPE_DIRECTORY) {
-        /* need to return the directory fd so the caller can deal with it */
+        /* create the directory entry */
         pseudo[2] = 'd';
         *pseudoD = 0;
+        if (mkdirat(destDir, pseudo, 0700) < 0) {
+            if (errno != EEXIST) {
+                PERRLN(pseudo);
+                goto done;
+            }
+        }
+
+        /* need to return the directory fd so the caller can deal with it */
         rfd = openat(destDir, pseudo, O_RDONLY);
 
     }
