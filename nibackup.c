@@ -285,7 +285,7 @@ int main(int argc, char **argv)
         /* pull off current messages */
         pthread_mutex_lock(&ni.qlock);
         ev = ni.notifs;
-        ni.notifs = ni.lastNotif = NULL;
+        ni.notifs = NULL;
         pthread_mutex_unlock(&ni.qlock);
 
         /* then back them up */
@@ -471,12 +471,9 @@ static void *periodicFull(void *nivp)
         ev->file = NULL;
 
         pthread_mutex_lock(&ni->qlock);
-        if (ni->notifs == NULL) {
-            ni->notifs = ni->lastNotif = ev;
-        } else {
-            ni->lastNotif->next = ev;
-            ni->lastNotif = ev;
-        }
+
+        ev->next = ni->notifs;
+        ni->notifs = ev;
 
         pthread_mutex_unlock(&ni->qlock);
         sem_post(&ni->qsem);

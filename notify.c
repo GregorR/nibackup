@@ -109,7 +109,7 @@ void notifyInit(NiBackup *ni)
     pthread_mutex_init(&watchesLock, NULL);
 
     /* and save our data */
-    ni->notifs = ni->lastNotif = NULL;
+    ni->notifs = NULL;
     ni->fanotifFd = ffd;
     ni->inotifFd = ifd;
 }
@@ -117,7 +117,7 @@ void notifyInit(NiBackup *ni)
 /* enqueue this event */
 static void enqueue(NiBackup *ni, char *file)
 {
-    NotifyQueue *ev;
+    NotifyQueue *last, *cur, *ev;
 
     /* make sure it's in the source */
     if (strncmp(ni->source, file, ni->sourceLen) ||
@@ -134,6 +134,17 @@ static void enqueue(NiBackup *ni, char *file)
 
     pthread_mutex_lock(&ni->qlock);
 
+    /* check that it isn't already present */
+    last = cur = ni->notifs;
+    while (cur) {
+        if (cur->file && !strcmp(cur->file, file)) {
+            free(file);
+            return;
+        }
+        last = cur;
+        cur = cur->next;
+    }
+
     /* create this event */
     ev = malloc(sizeof(NotifyQueue));
     if (ev == NULL) {
@@ -145,11 +156,10 @@ static void enqueue(NiBackup *ni, char *file)
     ev->file = file;
 
     /* and add it */
-    if (ni->notifs == NULL) {
-        ni->notifs = ni->lastNotif = ev;
+    if (last == NULL) {
+        ni->notifs = ev;
     } else {
-        ni->lastNotif->next = ev;
-        ni->lastNotif = ev;
+        last->next = ev;
     }
 
     /* notify */

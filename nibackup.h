@@ -44,7 +44,7 @@ struct NiBackup_ {
     pthread_t fanotifTh, inotifTh;
     pthread_mutex_t qlock;
     sem_t qsem;
-    NotifyQueue *notifs, *lastNotif;
+    NotifyQueue *notifs;
     int fanotifFd, inotifFd;
 
     /* threads for actual backup */
