@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "exclude.h"
 #include "nibackup.h"
 #include "notify.h"
 
@@ -126,8 +127,8 @@ static void enqueue(NiBackup *ni, char *file)
         return;
     }
 
-    /* and ignore dotfiles */
-    if (ni->noRootDotfiles && file[ni->sourceLen + 1] == '.') {
+    /* handle exclusions */
+    if (excluded(ni, file + ni->sourceLen + 1)) {
         free(file);
         return;
     }
