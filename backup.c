@@ -346,6 +346,12 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
         if (meta.type == MD_TYPE_DIRECTORY) {
             pseudo[2] = 'd';
             *pseudoD = 0;
+            if (mkdirat(destDir, pseudo, 0700) < 0) {
+                if (errno != EEXIST) {
+                    PERRLN(pseudo);
+                    goto done;
+                }
+            }
             rfd = openat(destDir, pseudo, O_RDONLY);
         }
         goto done;
