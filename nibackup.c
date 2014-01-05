@@ -56,11 +56,12 @@ static void *periodicFull(void *nivp);
 
 int main(int argc, char **argv)
 {
+    ARG_VARS;
     NiBackup ni;
     pthread_t cycleTh,
               fullTh;
     struct stat sbuf;
-    int i, tmpi, argi;
+    int i, tmpi;
     char *exclusionsFile = NULL;
 
     ni.source = NULL;
@@ -75,36 +76,35 @@ int main(int argc, char **argv)
 
     ni.fanotifFd = ni.inotifFd = -1;
 
-    for (argi = 1; argi < argc; argi++) {
-        char *arg = argv[argi];
-
-        if (arg[0] == '-') {
+    ARG_NEXT();
+    while (argType) {
+        if (argType != ARG_VAL) {
             ARGN(w, notification-wait) {
-                arg = argv[++argi];
+                ARG_GET();
                 ni.waitAfterNotif = atoi(arg);
 
             } else ARGN(F, full-sync-cycle) {
-                arg = argv[++argi];
+                ARG_GET();
                 ni.fullSyncCycle = atoi(arg);
 
             } else ARGN(x, exclude-from) {
-                arg = argv[++argi];
+                ARG_GET();
                 exclusionsFile = arg;
 
             } else ARG(., no-root-dotfiles) {
                 ni.noRootDotfiles = 1;
 
             } else ARGN(j, threads) {
-                arg = argv[++argi];
+                ARG_GET();
                 ni.threads = atoi(arg);
                 if (ni.threads <= 0) ni.threads = 1;
 
             } else ARGLN(max-bsdiff) {
-                arg = argv[++argi];
+                ARG_GET();
                 ni.maxbsdiff = atoll(arg);
 
             } else ARGN(v, verbose) {
-                arg = argv[++argi];
+                ARG_GET();
                 ni.verbose = atoi(arg);
 
             } else if (argc > argi+2 && ARGLC(notification-fds)) {
@@ -131,6 +131,8 @@ int main(int argc, char **argv)
 
             }
         }
+
+        ARG_NEXT();
     }
 
     if (!ni.source || !ni.dest) {

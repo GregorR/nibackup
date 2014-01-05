@@ -56,21 +56,21 @@ static void purge(long long maxAge, int inDeadDir, int dirfd, char *name);
 
 int main(int argc, char **argv)
 {
+    ARG_VARS;
     const char *backupDir = NULL;
     long long maxAge, oldest;
     int setAge = 0, setTime = 0;
-    int fd, argi;
+    int fd;
     long name_max;
 
-    for (argi = 1; argi < argc; argi++) {
-        char *arg = argv[argi];
-
-        if (arg[0] == '-') {
+    ARG_NEXT();
+    while (argType) {
+        if (argType != ARG_VAL) {
             ARG(n, dry-run) {
                 dryRun = 1;
 
             } else ARGN(a, age) {
-                arg = argv[++argi];
+                ARG_GET();
                 maxAge = atoll(arg);
                 setAge = 1;
                 if (maxAge <= 0 && strcmp(arg, "0")) {
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
                 }
 
             } else ARGN(t, time) {
-                arg = argv[++argi];
+                ARG_GET();
                 oldest = atoll(arg);
                 setTime = 1;
                 if (oldest == 0 && strcmp(arg, "0")) {
@@ -104,6 +104,8 @@ int main(int argc, char **argv)
             }
 
         }
+
+        ARG_NEXT();
     }
 
     if (!backupDir || setAge == setTime) {

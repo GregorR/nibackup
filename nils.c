@@ -76,6 +76,7 @@ static int strppcmp(const void *l, const void *r);
 
 int main(int argc, char **argv)
 {
+    ARG_VARS;
     NiLsOpt opt;
     const char *backupDir = NULL;
     char *selection = NULL;
@@ -83,16 +84,14 @@ int main(int argc, char **argv)
     int setAge = 0, setTime = 0;
     int sourceFd;
     long name_max;
-    int argi;
 
     memset(&opt, 0, sizeof(opt));
 
-    for (argi = 1; argi < argc; argi++) {
-        char *arg = argv[argi];
-
-        if (arg[0] == '-') {
+    ARG_NEXT();
+    while (argType) {
+        if (argType != ARG_VAL) {
             ARGN(a, age) {
-                arg = argv[++argi];
+                ARG_GET();
                 maxAge = atoll(arg);
                 setAge = 1;
                 if (maxAge <= 0 && strcmp(arg, "0")) {
@@ -101,7 +100,7 @@ int main(int argc, char **argv)
                 }
 
             } else ARGN(t, time) {
-                arg = argv[++argi];
+                ARG_GET();
                 newest = atoll(arg);
                 setTime = 1;
                 if (newest == 0 && strcmp(arg, "0")) {
@@ -141,6 +140,8 @@ int main(int argc, char **argv)
             }
 
         }
+
+        ARG_NEXT();
     }
 
     if (!backupDir || (setAge && setTime)) {
