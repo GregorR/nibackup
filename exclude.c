@@ -37,7 +37,7 @@ int loadExclusions(NiBackup *ni, const char *from)
 {
     char *buf = NULL;
     size_t bufsz, bufused;
-    Exclusion *excl, *nexcl;
+    Exclusion *excl = NULL, *nexcl;
     int tmpi;
     int ret = -1;
     FILE *fh = fopen(from, "r");
@@ -91,6 +91,7 @@ int loadExclusions(NiBackup *ni, const char *from)
     }
 
     ni->exclusions = excl;
+    excl = NULL;
     ret = 0;
 
 done:

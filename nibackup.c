@@ -222,7 +222,10 @@ int main(int argc, char **argv)
 
     /* load our exclusions */
     if (exclusionsFile) {
-        loadExclusions(&ni, exclusionsFile);
+        if (loadExclusions(&ni, exclusionsFile) < 0) {
+            perror(exclusionsFile);
+            return 1;
+        }
     } else {
         ni.exclusions = NULL;
     }

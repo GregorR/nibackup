@@ -59,11 +59,11 @@
 
 #define ARG_GET() do { \
     if (argType == ARG_SHORT && arg[1]) { \
-        argType = ARG_VAL; \
         arg++; \
     } else { \
         arg = argv[++argi]; \
     } \
+    argType = ARG_VAL; \
 } while (0)
 
 #endif
