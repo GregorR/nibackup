@@ -525,43 +525,52 @@ static void *backupPathTh(void *bpavp)
 /* call backupPath in an available thread, or block 'til one is available */
 static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir)
 {
-    int ti;
-    BackupPathArgs *bpa = malloc(sizeof(BackupPathArgs));
-    if (!bpa) {
-        /* FIXME */
-        close(source);
-        close(destDir);
-        return;
-    }
-
-    bpa->ni = ni;
-    bpa->name = name;
-    bpa->source = source;
-    bpa->destDir = destDir;
-
-    /* wait until a thread is free */
-    sem_wait(&ni->bsem);
-
-    /* and start it */
-    for (ti = 0; ti < ni->threads; ti++) {
-        pthread_mutex_lock(&ni->blocks[ti]);
-        if (!ni->brunning[ti]) {
-            /* not running, take it */
-            ni->brunning[ti] = 1;
-            bpa->ti = ti;
-            pthread_create(&ni->bth[ti], NULL, backupPathTh, bpa);
-            pthread_mutex_unlock(&ni->blocks[ti]);
-            break;
-        }
-        pthread_mutex_unlock(&ni->blocks[ti]);
-    }
-
-    if (ti == ni->threads) {
-        /* FIXME: this should never happen */
-        free(bpa);
+    if (ni->threads == 1) {
+        /* we don't need no stinkin' threads! */
+        backupPath(ni, name, source, destDir);
         free(name);
         close(source);
         close(destDir);
+
+    } else {
+        int ti;
+        BackupPathArgs *bpa = malloc(sizeof(BackupPathArgs));
+        if (!bpa) {
+            /* FIXME */
+            close(source);
+            close(destDir);
+            return;
+        }
+
+        bpa->ni = ni;
+        bpa->name = name;
+        bpa->source = source;
+        bpa->destDir = destDir;
+
+        /* wait until a thread is free */
+        sem_wait(&ni->bsem);
+
+        /* and start it */
+        for (ti = 0; ti < ni->threads; ti++) {
+            pthread_mutex_lock(&ni->blocks[ti]);
+            if (!ni->brunning[ti]) {
+                /* not running, take it */
+                ni->brunning[ti] = 1;
+                bpa->ti = ti;
+                pthread_create(&ni->bth[ti], NULL, backupPathTh, bpa);
+                pthread_mutex_unlock(&ni->blocks[ti]);
+                break;
+            }
+            pthread_mutex_unlock(&ni->blocks[ti]);
+        }
+
+        if (ti == ni->threads) {
+            /* FIXME: this should never happen */
+            free(bpa);
+            free(name);
+            close(source);
+            close(destDir);
+        }
     }
 }
 
