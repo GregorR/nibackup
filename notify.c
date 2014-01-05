@@ -138,6 +138,7 @@ static void enqueue(NiBackup *ni, char *file)
     last = cur = ni->notifs;
     while (cur) {
         if (cur->file && !strcmp(cur->file, file)) {
+            pthread_mutex_unlock(&ni->qlock);
             free(file);
             return;
         }
