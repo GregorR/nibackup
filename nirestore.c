@@ -254,7 +254,7 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
 
     /* open and lock the increment file */
     SF(ifd, openat, -1, name, (sourceDir, pseudo, O_RDONLY));
-    SF(tmpi, flock, -1, pseudo, (ifd, LOCK_EX));
+    SF(tmpi, flock, -1, pseudo, (ifd, LOCK_SH));
 
     /* read in the current increment */
     incrBuf[read(ifd, incrBuf, sizeof(incrBuf))] = 0;
