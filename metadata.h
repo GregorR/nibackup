@@ -41,7 +41,7 @@ typedef struct BackupMetadata_ BackupMetadata;
 int openMetadata(BackupMetadata *meta, int *fd, int dirfd, const char *name);
 
 /* read serialized metadata */
-int readMetadata(BackupMetadata *meta, int dirfd, const char *name);
+int readMetadata(BackupMetadata *meta, int dirfd, const char *name, int failIfNotFound);
 
 /* write serialized metadata */
 int writeMetadata(BackupMetadata *meta, int dirfd, const char *name);

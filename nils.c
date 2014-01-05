@@ -366,7 +366,7 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
     if (oldIncr == 0) goto done;
 
     /* load in the metadata */
-    SFE(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo));
+    SFE(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo, 0));
 
     /* skip it if it doesn't exist */
     if (meta.type == MD_TYPE_NONEXIST && !opt->history) goto done;
@@ -388,7 +388,7 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
             sprintf(pseudoD, "/%llu.met", ii);
 
             if (fstatat(sourceDir, pseudo, &sbuf, 0) == 0 &&
-                readMetadata(&meta, sourceDir, pseudo) == 0) {
+                readMetadata(&meta, sourceDir, pseudo, 0) == 0) {
                 printf("%*llu %5llu ", (int) longestName + 12, (unsigned long long) sbuf.st_mtime, ii);
                 if (opt->llong)
                     lsMeta(&meta);

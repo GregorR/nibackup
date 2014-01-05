@@ -97,7 +97,7 @@ int openMetadata(BackupMetadata *meta, int *fd, int dirfd, const char *name)
 }
 
 /* utility function to read serialized metadata */
-int readMetadata(BackupMetadata *meta, int dirfd, const char *name)
+int readMetadata(BackupMetadata *meta, int dirfd, const char *name, int failIfNotFound)
 {
     int fd;
     FILE *fh;
@@ -108,7 +108,7 @@ int readMetadata(BackupMetadata *meta, int dirfd, const char *name)
             /* nonexistent */
             memset(meta, 0, sizeof(BackupMetadata));
             meta->type = MD_TYPE_NONEXIST;
-            return 0;
+            return failIfNotFound ? -1 : 0;
         }
         return -1;
     }

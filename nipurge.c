@@ -199,7 +199,7 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
     /* and the current metadata */
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.met", curIncr);
-    if (readMetadata(&curMeta, dirfd,  pseudo) != 0) goto done;
+    if (readMetadata(&curMeta, dirfd,  pseudo, 1) != 0) goto done;
 
     /* now find the first dead increment */
     for (oldIncr = curIncr - (inDeadDir ? 0 : 1); oldIncr > 0; oldIncr--) {
@@ -218,7 +218,7 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
         BackupMetadata meta;
         pseudo[2] = 'm';
         sprintf(pseudoD, "/%llu.met", ii);
-        if (readMetadata(&meta, dirfd, pseudo) == 0) {
+        if (readMetadata(&meta, dirfd, pseudo, 1) == 0) {
             if (meta.type == MD_TYPE_NONEXIST) oldIncr = ii;
             else break;
         } else break;

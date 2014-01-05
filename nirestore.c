@@ -276,7 +276,7 @@ static void restore(long long newest, int sourceDir, int targetDir, char *name)
     if (oldIncr == 0) goto done;
 
     /* load in the metadata */
-    SF(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo));
+    SF(tmpi, readMetadata, -1, pseudo, (&meta, sourceDir, pseudo, 1));
 
     if (targetDir == -1)
         printf("%s\n", name);
