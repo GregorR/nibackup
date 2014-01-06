@@ -48,7 +48,9 @@
 #define ARGSC(s)    (argType == ARG_SHORT && *arg == #s[0])
 #define ARGSNC(s)   (ARGSC(s) && (arg[1] || argv[argi+1]))
 #define ARGLC(l)    (argType == ARG_LONG && !strcmp(arg, "--" #l))
-#define ARGLNC(l)   (ARGLC(l) && argv[argi+1])
+#define ARGLNC(l)   (argType == ARG_LONG && \
+                     (!strcmp(arg, "--" #l) || \
+                      !strncmp(arg, "--" #l "=", sizeof("--" #l "=")-1)))
 
 #define ARGS(c)     if ARGSC(c)
 #define ARGSN(c)    if ARGSNC(c)
@@ -59,6 +61,8 @@
 
 #define ARG_GET() do { \
     if (argType == ARG_SHORT && arg[1]) { \
+        arg++; \
+    } else if (argType == ARG_LONG && (arg = strchr(arg, '='))) { \
         arg++; \
     } else { \
         arg = argv[++argi]; \
