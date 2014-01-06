@@ -90,6 +90,10 @@ int main(int argc, char **argv)
     ARG_NEXT();
     while (argType) {
         if (argType != ARG_VAL) {
+            ARGV(H, history, opt.history)
+            ARGV(d, directory, opt.dir)
+            ARGV(l, long, opt.llong)
+            ARGV(R, recursive, opt.recursive)
             ARGN(a, age) {
                 ARG_GET();
                 maxAge = atoll(arg);
@@ -107,18 +111,6 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid restoration time\n");
                     return 1;
                 }
-
-            } else ARG(H, history) {
-                opt.history = 1;
-
-            } else ARG(d, directory) {
-                opt.dir = 1;
-
-            } else ARG(l, long) {
-                opt.llong = 1;
-
-            } else ARG(R, recursive) {
-                opt.recursive = 1;
 
             } else {
                 usage();

@@ -79,6 +79,8 @@ int main(int argc, char **argv)
     ARG_NEXT();
     while (argType) {
         if (argType != ARG_VAL) {
+            ARGV(., no-root-dotfiles, ni.noRootDotfiles)
+            ARGNV(x, exclude-from, exclusionsFile)
             ARGN(w, notification-wait) {
                 ARG_GET();
                 ni.waitAfterNotif = atoi(arg);
@@ -86,13 +88,6 @@ int main(int argc, char **argv)
             } else ARGN(F, full-sync-cycle) {
                 ARG_GET();
                 ni.fullSyncCycle = atoi(arg);
-
-            } else ARGN(x, exclude-from) {
-                ARG_GET();
-                exclusionsFile = arg;
-
-            } else ARG(., no-root-dotfiles) {
-                ni.noRootDotfiles = 1;
 
             } else ARGN(j, threads) {
                 ARG_GET();

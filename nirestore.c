@@ -84,6 +84,7 @@ int main(int argc, char **argv)
     ARG_NEXT();
     while (argType) {
         if (argType != ARG_VAL) {
+            ARGNV(i, selection, selection)
             ARGN(a, age) {
                 ARG_GET();
                 maxAge = atoll(arg);
@@ -101,10 +102,6 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid restoration time\n");
                     return 1;
                 }
-
-            } else ARGN(i, selection) {
-                ARG_GET();
-                selection = arg;
 
             } else {
                 usage();

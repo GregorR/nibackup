@@ -67,6 +67,7 @@ int main(int argc, char **argv)
     ARG_NEXT();
     while (argType) {
         if (argType != ARG_VAL) {
+            ARGV(n, dry-run, dryRun)
             ARGN(a, age) {
                 ARG_GET();
                 maxAge = atoll(arg);
@@ -84,9 +85,6 @@ int main(int argc, char **argv)
                     fprintf(stderr, "Invalid purge time\n");
                     return 1;
                 }
-
-            } else ARG(n, dry-run) {
-                dryRun = 1;
 
             } else ARGN(v, verbose) {
                 ARG_GET();
