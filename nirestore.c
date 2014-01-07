@@ -123,6 +123,8 @@ int main(int argc, char **argv)
             }
 
         }
+
+        ARG_NEXT();
     }
 
     if (!backupDir || (setAge && setTime)) {
