@@ -277,7 +277,7 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     ssize_t rd;
     BackupMetadata lastMeta, meta;
 
-    if (!strcmp(name, "")) abort();
+    if (!name[0]) goto done;
 
     /* space for our pseudofiles: ni?<name>/<ull>.{old,new} */
     namelen = strlen(name);
