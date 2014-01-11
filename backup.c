@@ -269,7 +269,7 @@ static const char pseudos[] = "cm"; /* content, metadata */
  * applicable */
 static int backupPath(NiBackup *ni, char *name, int source, int destDir)
 {
-    char *pseudo = NULL, *pseudoD, *pseudo2, *pseudo2D;
+    char *pseudo = NULL, *pseudoD, *pseudo2 = NULL, *pseudo2D;
     int i, ifd = -1, ffd = -1, rfd = -1, wroteData = 0;
     size_t namelen;
     unsigned long long lastIncr, curIncr;
