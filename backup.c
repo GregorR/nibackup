@@ -175,7 +175,8 @@ void backupRecursiveF(NiBackup *ni, int source, int dest, struct Buffer_char *fu
             /* check if it's been deleted */
             if (faccessat(source, de->d_name + 3, F_OK, AT_SYMLINK_NOFOLLOW) != 0) {
                 /* back it up */
-                backupPath(ni, de->d_name + 3, source, dest);
+                int bpfd = backupPath(ni, de->d_name + 3, source, dest);
+                if (bpfd >= 0) close(bpfd);
             }
         }
 
@@ -515,10 +516,12 @@ done:
 /* backupPath, thread version */
 static void *backupPathTh(void *bpavp)
 {
+    int bpfd;
     BackupPathArgs *bpa = (BackupPathArgs *) bpavp;
 
     /* perform the actual backup */
-    backupPath(bpa->ni, bpa->name, bpa->source, bpa->destDir);
+    bpfd = backupPath(bpa->ni, bpa->name, bpa->source, bpa->destDir);
+    close(bpfd);
 
     /* then mark ourself done */
     pthread_mutex_lock(&bpa->ni->blocks[bpa->ti]);
@@ -541,7 +544,8 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
 {
     if (ni->threads == 1) {
         /* we don't need no stinkin' threads! */
-        backupPath(ni, name, source, destDir);
+        int bpfd = backupPath(ni, name, source, destDir);
+        close(bpfd);
         free(name);
         close(source);
         close(destDir);
