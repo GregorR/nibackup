@@ -521,7 +521,7 @@ static void *backupPathTh(void *bpavp)
 
     /* perform the actual backup */
     bpfd = backupPath(bpa->ni, bpa->name, bpa->source, bpa->destDir);
-    close(bpfd);
+    if (bpfd >= 0) close(bpfd);
 
     /* then mark ourself done */
     pthread_mutex_lock(&bpa->ni->blocks[bpa->ti]);
@@ -545,7 +545,7 @@ static void backupPathInThread(NiBackup *ni, char *name, int source, int destDir
     if (ni->threads == 1) {
         /* we don't need no stinkin' threads! */
         int bpfd = backupPath(ni, name, source, destDir);
-        close(bpfd);
+        if (bpfd >= 0) close(bpfd);
         free(name);
         close(source);
         close(destDir);
