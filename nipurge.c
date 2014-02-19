@@ -19,6 +19,7 @@
 #define _XOPEN_SOURCE 700
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -199,12 +200,21 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
     /* read in the current increment */
     incrBuf[read(ifd, incrBuf, sizeof(incrBuf))] = 0;
     curIncr = atoll(incrBuf);
-    if (curIncr == 0) goto done;
+    if (curIncr == 0) {
+        memset(&curMeta, 0, sizeof(BackupMetadata));
+        curMeta.type = MD_TYPE_DIRECTORY; /* just in case */
+        goto tryRemoveSubdirs;
+    }
 
     /* and the current metadata */
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.met", curIncr);
-    if (readMetadata(&curMeta, dirfd,  pseudo, 1) != 0) goto done;
+    if (readMetadata(&curMeta, dirfd,  pseudo, 1) != 0) {
+        if (errno == ENOENT)
+            goto tryRemoveSubdirs;
+        else
+            goto tryRemove;
+    }
 
     /* now find the first dead increment */
     for (oldIncr = curIncr - (inDeadDir ? 0 : 1); oldIncr > 0; oldIncr--) {
@@ -229,7 +239,7 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
         } else break;
     }
 
-    if (oldIncr == 0) goto done;
+    if (oldIncr == 0) goto tryRemoveSubdirs;
 
     /* maybe just say what we would have done */
     if (dryRun || verbose) {
@@ -256,6 +266,7 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
     }
 
     /* recurse to subdirectories */
+tryRemoveSubdirs:
     pseudo[2] = 'd';
     *pseudoD = 0;
     dfd = openat(dirfd, pseudo, O_RDONLY);
@@ -265,6 +276,7 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
     }
 
     /* now we may have gotten rid of the file entirely */
+tryRemove:
     if (!dryRun) {
         for (i = 0; pseudos[i]; i++) {
             pseudo[2] = pseudos[i];
@@ -277,7 +289,6 @@ void purge(long long oldest, int inDeadDir, int dirfd, char *name)
         }
     }
 
-done:
     close(ifd);
     free(pseudo);
 }

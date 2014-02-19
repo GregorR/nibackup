@@ -108,6 +108,7 @@ int readMetadata(BackupMetadata *meta, int dirfd, const char *name, int failIfNo
             /* nonexistent */
             memset(meta, 0, sizeof(BackupMetadata));
             meta->type = MD_TYPE_NONEXIST;
+            errno = ENOENT; /* preserve the ENOENT */
             return failIfNotFound ? -1 : 0;
         }
         return -1;
