@@ -337,8 +337,10 @@ static int backupPath(NiBackup *ni, char *name, int source, int destDir)
     pseudo[2] = 'm';
     sprintf(pseudoD, "/%llu.met", lastIncr);
     if (readMetadata(&lastMeta, destDir, pseudo, (lastIncr != 0)) != 0) {
-        PERRLN(name);
-        goto done;
+        if (errno != ENOENT) {
+            PERRLN(name);
+            goto done;
+        }
     }
 
     /* check if it's changed */

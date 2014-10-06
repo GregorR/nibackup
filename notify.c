@@ -70,7 +70,7 @@ void notifyInit(NiBackup *ni)
         /* init fanotify */
         ffd = fanotify_init(
             FAN_CLASS_CONTENT,
-            O_PATH | O_CLOEXEC);
+            O_RDONLY | O_CLOEXEC);
         if (ffd == -1) {
             /* critical */
             perror("fanotify_init");
