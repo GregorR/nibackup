@@ -24,15 +24,17 @@ Using NiBackup
 ==============
 
 NiBackup consists of four tools: `nibackup` (the daemon), `nibackup-purge`,
-`nibackup-ls` and nibackup-restore.
+`nibackup-ls` and `nibackup-restore`.
 
-`nibackup` is the daemon. Running it is very simple:
-`sudo nibackup <directory to back up> <backup directory>`.
-It will start with a full synchronization, then use fanotify and inotify to
-watch for future changes. Additional options are available to control wait
-times, ignore dotfiles, etc. `sudo` is necessary to use fanotify: nibackup will
-drop its root privileges as soon as it can. If the backup directory is within
-the directory to back up, the universe will implode.
+`nibackup` is the daemon. Running it is very simple: `sudo nibackup <directory
+to back up> <backup directory>`.  It will start with a full synchronization,
+then use fanotify and inotify to watch for future changes. Additional options
+are available to control wait times, ignore dotfiles, etc. `sudo` is necessary
+to use fanotify, so is necessary, but `nibackup` will drop its root privileges
+as soon as it can. You may instead make `nibackup` setuid-root if you prefer.
+If the backup directory is within the directory to back up, the universe will
+implode. `nibackup` makes no attempt to detect or correct for this
+universe-imploding scenario.
 
 `nibackup-purge` purges old data from a backup.
 `nibackup-purge -a <age> <backup>`
@@ -83,6 +85,14 @@ intermediate time, it may e.g. restore both names of a rename or restore a
 file that was actually deleted. Nothing it does is (or can be) atomic, so the
 restore state is never guaranteed to be precisely what was on the disk at any
 given time, only the state of each file as it existed at some time.
+
+NiBackup does not keep a log of its actions indexed by time. As such,
+`nibackup-purge` is *very slow*, as it must crawl the entire backup to check
+what can be deleted. As a point of reference, Gregor's backup is about 2TB,
+purged once a week, and `nibackup-purge` takes about two days to complete (with
+both low CPU and I/O priority). It is harmless, and indeed recommended, to run
+`nibackup-purge` concurrently with `nibackup`. In the future, NiBackup may be
+redesigned to store a time index in the form of a simple database.
 
 
 Technical
