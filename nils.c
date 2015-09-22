@@ -327,6 +327,11 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
     unsigned long long curIncr, oldIncr;
     BackupMetadata meta;
     struct stat sbuf;
+    struct tm tmbuf;
+    time_t tmt;
+
+#define TMSZ 64
+    char tmstr[TMSZ];
 
     meta.type = MD_TYPE_NONEXIST;
 
@@ -365,8 +370,13 @@ static int ls(NiLsOpt *opt, int sourceDir, char *name, size_t longestName)
 
     /* list out the metadata, possibly in long format */
     printf("%-*s ", (int) longestName, name);
-    if (opt->history)
-        printf("%11llu %5llu ", (unsigned long long) sbuf.st_mtime, oldIncr);
+    if (opt->history) {
+        tmt = sbuf.st_mtime;
+        gmtime_r(&tmt, &tmbuf);
+        tmstr[0] = '\0';
+        strftime(tmstr, TMSZ, "%Y-%m-%dT%H:%M:%S", &tmbuf);
+        printf("%11llu %s %5llu ", (unsigned long long) sbuf.st_mtime, tmstr, oldIncr);
+    }
     if (opt->llong)
         lsMeta(&meta);
     putchar('\n');
